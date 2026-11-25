@@ -1,0 +1,45 @@
+# Temporary Phase 2.1 Test B workflow (test branch only, not part of any PR).
+# SOMA vs cq_warehouse direct comparison (M6x20 screw, ISO 7089 M6 washer).
+# Everything runs on a throwaway GitHub-hosted runner; nothing touches the local machine.
+name: Phase2.1 SOMA comparison (temporary)
+on:
+  push:
+    branches: [test/phase21-compare]
+permissions:
+  contents: read
+jobs:
+  compare:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          path: cmp-src
+
+      # SOMA sources (read-only, pinned to the reviewed commit)
+      - uses: actions/checkout@v5
+        with:
+          repository: robertpezdirc8-prog/SOMA
+          ref: cf8e629ef0dc1c2c54ee3fb62d50a208aa938c27
+          path: soma-src
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install pinned stack and cq_warehouse at exact commit
+        run: |
+          python -m pip install --upgrade pip
+          pip install "cadquery==2.8.0" "cadquery-ocp==7.9.3.1.1" "cadquery-ocp-proxy==7.9.3.1.1"
+          pip install "git+https://github.com/gumyr/cq_warehouse.git@a307044f91c9cc5433fde92cb1fa145c01b2bde7"
+          pip list
+
+      - name: Run comparison
+        run: python cmp-src/phase21/soma-compare/phase21_soma_compare.py
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: phase21-compare-results
+          path: phase21-compare-results.json
+          if-no-files-found: warn
