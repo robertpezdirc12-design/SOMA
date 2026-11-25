@@ -27,12 +27,30 @@ RESULTS = {"env": {}, "inventory": {}, "tests": [], "roundtrip": {}, "soma": {},
 
 def part_stats(obj):
     sh = obj.val() if hasattr(obj, "val") else obj
-    bb = sh.BoundingBox()
-    return {
-        "volume_mm3": round(sh.Volume(), 3),
-        "bbox_mm": [round(bb.xlen, 3), round(bb.ylen, 3), round(bb.zlen, 3)],
-        "valid": bool(sh.isValid()) if hasattr(sh, "isValid") else None,
-    }
+    try:
+        bb = sh.BoundingBox()
+        bbox = [round(bb.xlen, 3), round(bb.ylen, 3), round(bb.zlen, 3)]
+    except Exception as e:
+        bbox = f"n/a ({type(e).__name__})"
+    try:
+        vol = round(sh.Volume(), 3)
+    except Exception:
+        vol = None
+    try:
+        valid = bool(sh.isValid())
+    except Exception:
+        valid = None
+    return {"volume_mm3": vol, "bbox_mm": bbox, "valid": valid}
+
+
+def pick_type(cls, prefer=("iso", "din")):
+    """Prefer metric ISO/DIN fastener types (sets sort imperial 'asme' first)."""
+    types = sorted(cls.types())
+    for p in prefer:
+        for t in types:
+            if p in t.lower():
+                return t, types
+    return (types[0] if types else None), types
 
 
 def try_variants(name, variants):
@@ -146,8 +164,7 @@ def creation_tests():
     def variants_for(cls, size, lengths):
         v = []
         params = inspect.signature(cls.__init__).parameters
-        types = sorted(cls.types())
-        t = types[0] if types else None
+        t, _ = pick_type(cls)
         for length in lengths:
             kw = {"size": size}
             if "length" in params:
@@ -162,8 +179,7 @@ def creation_tests():
     parts = {}
     # screw
     screw_cls = SocketHeadCapScrew
-    screw_types = sorted(screw_cls.types())
-    t = screw_types[0]
+    t, screw_types = pick_type(screw_cls)
     size, sizes = first_sizes(screw_cls, t)
     RESULTS.setdefault("inventory", {})["socket_head_cap_types"] = screw_types
     RESULTS["inventory"]["socket_head_cap_sizes_sample"] = sizes[:8]
@@ -174,8 +190,7 @@ def creation_tests():
 
     # nut
     nut_cls = HexNut
-    nut_types = sorted(nut_cls.types())
-    t = nut_types[0]
+    t, nut_types = pick_type(nut_cls)
     size, sizes = first_sizes(nut_cls, t)
     RESULTS["inventory"]["hex_nut_types"] = nut_types
     RESULTS["inventory"]["hex_nut_sizes_sample"] = sizes[:8]
@@ -194,8 +209,7 @@ def creation_tests():
 
     # washer
     wash_cls = PlainWasher
-    wash_types = sorted(wash_cls.types())
-    t = wash_types[0]
+    t, wash_types = pick_type(wash_cls)
     size, sizes = first_sizes(wash_cls, t)
     RESULTS["inventory"]["plain_washer_types"] = wash_types
     params = inspect.signature(wash_cls.__init__).parameters
@@ -212,8 +226,7 @@ def creation_tests():
     # heat-set insert
     hs_cls = HeatSetNut
     try:
-        hs_types = sorted(hs_cls.types())
-        t = hs_types[0]
+        t, hs_types = pick_type(hs_cls)
         size, sizes = first_sizes(hs_cls, t)
         RESULTS["inventory"]["heatset_types"] = hs_types
         RESULTS["inventory"]["heatset_sizes_sample"] = sizes[:8]
@@ -236,7 +249,9 @@ def creation_tests():
     try:
         b_types = sorted(b_cls.types())
         t = b_types[0]
-        size, sizes = first_sizes(b_cls, t)
+        size, sizes = first_sizes(b_cls, t, prefer="M6")
+        if not str(size).startswith("M"):
+            size = next((s for s in sizes if s.startswith("M")), size)
         RESULTS["inventory"]["bearing_types"] = b_types
         RESULTS["inventory"]["bearing_sizes_sample"] = sizes[:8]
         bearing = try_variants("create SingleRowDeepGrooveBallBearing",
@@ -253,11 +268,11 @@ def creation_tests():
 def thread_tests():
     from cq_warehouse.thread import IsoThread
     out = {}
-    th = try_variants("create IsoThread simple=True",
+    th = try_variants("create IsoThread simple=True (calculation only, no solid)",
                       [("M6x10 simple", lambda: IsoThread(major_diameter=6.0, pitch=1.0, length=10.0,
                                                           external=True, simple=True))])
     if th is not None:
-        out["simple"] = part_stats(th)
+        out["simple"] = part_stats(th)  # expected: no bounding box (documented behaviour)
     th2 = try_variants("create IsoThread simple=False (real thread)",
                        [("M6x10 threaded", lambda: IsoThread(major_diameter=6.0, pitch=1.0, length=10.0,
                                                              external=True, simple=False))])
