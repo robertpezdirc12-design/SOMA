@@ -91,15 +91,16 @@ fi
 cat "$OUT/03-env-ensure.json"
 # evidence of what the mechanism wrote
 ls -la "$ENVDIR" > "$OUT/03-env-dir-listing.txt" 2>&1
+SITE=$("$ENVPY" -c "import sysconfig; print(sysconfig.get_path('purelib'))" 2>/dev/null)
+echo "SITE=$SITE" >> "$OUT/flags.env"
 cat "$ENVDIR/soma-env.json"      > "$OUT/03-soma-env.json" 2>/dev/null
-cat "$ENVDIR/_soma_base.pth"     > "$OUT/03-soma-base.pth" 2>/dev/null
+cat "$SITE/_soma_base.pth"       > "$OUT/03-soma-base.pth" 2>/dev/null   # env.py:110 writes it into the env site-packages
 cat "$ENVDIR/pip.conf"           > "$OUT/03-pip.conf" 2>/dev/null
 head -30 "$ENVDIR/base-constraints.txt" > "$OUT/03-base-constraints-head.txt" 2>/dev/null
 wc -l "$ENVDIR/base-constraints.txt"    >> "$OUT/03-base-constraints-head.txt" 2>/dev/null
 "$ENVPY" -m pip config debug > "$OUT/03-pip-config-debug.txt" 2>&1
 "$ENVPY" -m pip --version   > "$OUT/03-env-pip-version.txt" 2>&1
-SITE=$("$ENVPY" -c "import sysconfig; print(sysconfig.get_path('purelib'))" 2>/dev/null)
-echo "SITE=$SITE" >> "$OUT/flags.env"
+"$ENVPY" -c "import sys; print('sys.prefix =', sys.prefix)" > "$OUT/03-env-sys-prefix.txt" 2>&1
 ls "$SITE" > "$OUT/03-env-site-packages-before.txt" 2>&1
 
 # env python must see base packages (via _soma_base.pth) but NOT cq_warehouse yet
@@ -122,6 +123,7 @@ say "STEP 4: install cq_warehouse INTO the project env via the app's terminal fl
 export VIRTUAL_ENV="$ENVDIR"
 export PIP_PYTHON="$ENVPY"
 pip --version > "$OUT/04-pip-redirect-version.txt" 2>&1
+( unset PIP_PYTHON; pip --version ) > "$OUT/04-pip-version-without-redirect.txt" 2>&1
 if pip install "$CQW_PIN" > "$OUT/04-install-cqw-terminal-flow.log" 2>&1; then
   flag install_terminal_flow_ok 1
 else
