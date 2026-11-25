@@ -1,0 +1,44 @@
+# Temporary Phase 2.1 license-dist check (test branch only, not part of any PR).
+name: Phase2.1 license dist check (temporary)
+on:
+  push:
+    branches: [test/phase21-license]
+permissions:
+  contents: read
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install cq_warehouse at pinned commit and inspect the installed distribution
+        run: |
+          python -m pip install --upgrade pip
+          pip install "git+https://github.com/gumyr/cq_warehouse.git@a307044f91c9cc5433fde92cb1fa145c01b2bde7"
+          python - <<'PY' | tee license-dist-report.txt
+          import importlib.metadata as md, json, pathlib
+          d = md.distribution("cq_warehouse")
+          meta = d.metadata
+          print("Name:", meta.get("Name"), "| Version:", meta.get("Version"))
+          print("License field:", repr(meta.get("License")))
+          print("Classifier:", [c for c in meta.get_all("Classifier") or [] if "License" in c])
+          root = pathlib.Path(d.locate_file(""))
+          files = [str(f) for f in (d.files or []) if "dist-info" in str(f) and
+                   any(k in str(f).lower() for k in ("license", "licen", "copying", "notice"))]
+          print("License files in dist-info:", files)
+          for f in files:
+              p = root / f
+              if p.exists():
+                  txt = p.read_text(encoding="utf-8", errors="replace")
+                  print(f"--- {f} (first 2 lines):", txt.splitlines()[:2])
+          lic_dir = root / "cq_warehouse-0.8.0.dist-info" / "licenses"
+          print("licenses/ dir exists:", lic_dir.exists(), list(lic_dir.iterdir()) if lic_dir.exists() else "")
+          PY
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: license-dist-report
+          path: license-dist-report.txt
+          if-no-files-found: warn
