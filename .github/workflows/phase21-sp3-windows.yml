@@ -1,0 +1,121 @@
+# Temporary Phase 21 / Specialist 3 (Windows compatibility) workflow.
+# Test branch only (push trigger on test/phase21-windows), not part of any PR.
+# Proves the pinned SOMA stack + cq_warehouse 0.8.0 commit pin on windows-latest.
+# All heavy work runs on throwaway GitHub-hosted runners; nothing touches the
+# local machine; no SOMA integration code - evidence only.
+name: Phase21 SP3 Windows compatibility (temporary)
+on:
+  push:
+    branches: [test/phase21-windows]
+permissions:
+  contents: read
+
+jobs:
+  windows-core:
+    name: pinned stack + geometry suite (windows-latest)
+    runs-on: windows-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          path: sp3-src
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install pinned stack + cq_warehouse commit pin (git+https, archive fallback)
+        shell: bash
+        run: bash sp3-src/test/phase21/phase21_sp3_install.sh
+
+      - name: Geometry suite (Windows)
+        shell: bash
+        run: python sp3-src/test/phase21/phase21_sp3_geometry.py --out sp3-results-windows.json --os-tag windows
+
+      - name: Collect full install log
+        if: always()
+        shell: bash
+        run: cp "$RUNNER_TEMP/sp3-install-full.log" . 2>/dev/null || echo "no install log"
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: sp3-windows-core
+          path: |
+            sp3-results-windows.json
+            sp3-install.json
+            sp3-install-full.log
+          if-no-files-found: warn
+
+  linux-compare:
+    name: same-script baseline (ubuntu-latest)
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          path: sp3-src
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install pinned stack + cq_warehouse commit pin (git+https, archive fallback)
+        shell: bash
+        run: bash sp3-src/test/phase21/phase21_sp3_install.sh
+
+      - name: Geometry suite (Linux, identical script)
+        shell: bash
+        run: python sp3-src/test/phase21/phase21_sp3_geometry.py --out sp3-results-linux.json --os-tag linux
+
+      - name: Collect full install log
+        if: always()
+        shell: bash
+        run: cp "$RUNNER_TEMP/sp3-install-full.log" . 2>/dev/null || echo "no install log"
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: sp3-linux-compare
+          path: |
+            sp3-results-linux.json
+            sp3-install.json
+            sp3-install-full.log
+          if-no-files-found: warn
+
+  windows-soma-env:
+    name: SOMA project-env mechanism (windows-latest)
+    runs-on: windows-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          path: sp3-src
+
+      # SOMA sources at the reviewed commit (read-only), for python/soma/env.py
+      - uses: actions/checkout@v5
+        with:
+          repository: robertpezdirc8-prog/SOMA
+          ref: cf8e629ef0dc1c2c54ee3fb62d50a208aa938c27
+          path: soma-src
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install pinned base stack (cq_warehouse intentionally NOT in base)
+        shell: bash
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install "cadquery==2.8.0" "cadquery-ocp==7.9.3.1.1" "cadquery-ocp-proxy==7.9.3.1.1"
+
+      - name: SOMA env.ensure() + PIP_PYTHON install + import (Windows)
+        shell: bash
+        run: python sp3-src/test/phase21/phase21_sp3_env_test.py --soma-python soma-src/python --workdir envwork --out sp3-env-results.json
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: sp3-windows-soma-env
+          path: sp3-env-results.json
+          if-no-files-found: warn
