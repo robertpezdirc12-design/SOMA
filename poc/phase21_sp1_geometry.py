@@ -96,13 +96,16 @@ def fmt(x, nd=4):
 
 
 def shape_of(obj):
-    """cadquery Workplane / Shape / cq_warehouse object -> Shape"""
+    """cadquery Workplane / Shape / cq_warehouse / SOMA _Part -> Shape"""
     if isinstance(obj, cq.Shape):
         return obj
     if hasattr(obj, "val") and callable(obj.val):
         v = obj.val()
         if isinstance(v, cq.Shape):
             return v
+    if hasattr(obj, "shape") and isinstance(obj.shape, (cq.Shape, cq.Workplane)):
+        s = obj.shape
+        return s.val() if isinstance(s, cq.Workplane) else s
     return cq.Shape.cast(obj.wrapped) if hasattr(obj, "wrapped") else obj
 
 
@@ -610,10 +613,12 @@ def build_kwargs(cls, base):
 
 
 def create_part(name, cls, kwargs, records):
+    kw = build_kwargs(cls, kwargs)  # drop kwargs the constructor does not accept
     t0 = time.perf_counter()
-    ok, obj, err = safe(lambda: cls(**kwargs))
+    ok, obj, err = safe(lambda: cls(**kw))
     dt = round(time.perf_counter() - t0, 3)
-    rec = {"part": name, "class": cls.__name__, "call": f"{cls.__name__}({kwargs})",
+    rec = {"part": name, "class": cls.__name__, "call": f"{cls.__name__}({kw})",
+           "requested_kwargs": kwargs,
            "create_ok": ok, "create_seconds": dt, "create_error": err}
     if ok:
         try:
@@ -1133,8 +1138,8 @@ def run_soma_comparison():
     ):
         ok, p, err = safe(thunk)
         if ok:
-            sh = shape_of(p)
-            res[label] = shape_stats(sh)
+            ok2, st, err2 = safe(lambda: shape_stats(shape_of(p)))
+            res[label] = st if ok2 else {"error": err2}
         else:
             res[label] = {"error": err}
     RESULTS["soma_comparison"] = res
@@ -1240,12 +1245,21 @@ def main():
                 "(null shape) - calculation-only object, cannot be exported; "
                 "see source citation cq_warehouse.thread.IsoThread.__init__")
 
-    roundtrips = run_roundtrips(all_recs)
-    run_washer_root_cause(washer_recs)
-    run_bearing_root_cause(bearing_recs)
-    run_assembly_all(all_recs)
-    run_tolerance_analysis(roundtrips)
-    run_soma_comparison()
+    def step(label, fn):
+        try:
+            return fn()
+        except Exception as e:
+            RESULTS.setdefault("section_errors", {})[label] = (
+                f"{type(e).__name__}: {e}\n{traceback.format_exc()[-600:]}")
+            print(f"SECTION FAIL {label}: {type(e).__name__}: {e}")
+            return None
+
+    roundtrips = step("roundtrips", lambda: run_roundtrips(all_recs)) or []
+    step("washer_root_cause", lambda: run_washer_root_cause(washer_recs))
+    step("bearing_root_cause", lambda: run_bearing_root_cause(bearing_recs))
+    step("assembly_all", lambda: run_assembly_all(all_recs))
+    step("tolerance", lambda: run_tolerance_analysis(roundtrips))
+    step("soma_comparison", run_soma_comparison)
 
     RESULTS["env"]["total_run_seconds"] = round(time.perf_counter() - t_start, 2)
 
