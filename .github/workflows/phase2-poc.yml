@@ -1,0 +1,50 @@
+# Temporary Phase 2 POC workflow (test branch only, not part of any PR).
+# Isolated cq_warehouse 0.8.0 POC on SOMA's pinned stack (cadquery 2.8.0, cadquery-ocp 7.9.3.1.1).
+# Everything runs on a throwaway GitHub-hosted runner; nothing touches the local machine.
+name: Phase2 cq_warehouse POC (temporary)
+on:
+  push:
+    branches: [test/phase2-cqwarehouse]
+permissions:
+  contents: read
+jobs:
+  poc:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          path: poc-src
+
+      # SOMA sources for the fasteners comparison (read-only, pinned to the reviewed commit)
+      - uses: actions/checkout@v5
+        with:
+          repository: robertpezdirc8-prog/SOMA
+          ref: cf8e629ef0dc1c2c54ee3fb62d50a208aa938c27
+          path: soma-src
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install pinned stack (SOMA base versions) and cq_warehouse 0.8.0
+        run: |
+          python -m pip install --upgrade pip
+          pip install "cadquery==2.8.0" "cadquery-ocp==7.9.3.1.1" "cadquery-ocp-proxy==7.9.3.1.1"
+          pip install "git+https://github.com/gumyr/cq_warehouse.git@v0.8.0"
+          pip list
+
+      - name: Run POC
+        run: python poc-src/poc/phase2_poc.py
+
+      - name: Disk footprint of the environment
+        if: always()
+        run: |
+          echo "venv size:" && du -sh "$(python -c 'import sys; print(sys.prefix)')"
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: phase2-results
+          path: phase2-results.json
+          if-no-files-found: warn
