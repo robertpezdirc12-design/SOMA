@@ -53,6 +53,8 @@ def z_profile(sh, step=STEP):
     z = z0
     while z < z1 - 1e-9:
         ze = min(z + step, z1)
+        if ze - z < 1e-6:  # skip degenerate slabs (float accumulation)
+            break
         try:
             v = slab_volume(sh, z, ze)
         except Exception:
@@ -66,10 +68,14 @@ def csv_row(path, size="M6"):
     try:
         lines = Path(path).read_text(encoding="utf-8").splitlines()
         head = lines[0].split(",")
+        row = None
         for ln in lines[1:]:
-            if ln.split(",")[0] == size:
-                return dict(zip(head, ln.split(",")))
-        return {"error": f"row {size} not found"}
+            key = ln.split(",")[0]
+            if key == size or key.startswith(size) and not key[len(size)].isdigit():
+                row = dict(zip(head, ln.split(",")))
+                if key == size:
+                    break
+        return row or {"error": f"row {size} not found"}
     except Exception as e:
         return {"error": f"{type(e).__name__}: {e}"}
 
@@ -78,11 +84,12 @@ def screw_decomposition(label, sh):
     st = stats(sh)
     bb = sh.BoundingBox()
     z0, z1 = bb.zmin, bb.zmax
-    total = sh.Volume()
     prof = z_profile(sh)
-    # head end = the side whose first slabs have the larger area
-    area_first = prof[0][2] or 0
-    area_last = prof[-1][2] or 0
+    # head end = side with larger cross-sections; compare mean of first/last valid slabs
+    valid = [p for p in prof if p[2] is not None]
+    n = max(1, min(3, len(valid) // 4))
+    area_first = sum(p[2] for p in valid[:n]) / n
+    area_last = sum(p[2] for p in valid[-n:]) / n
     head_at_bottom = area_first > area_last
     k_nom = 6.0  # ISO 4762 M6 head height (max)
     if head_at_bottom:
@@ -157,18 +164,23 @@ def main():
 
     def make(cls, **kw):
         params = inspect.signature(cls.__init__).parameters
-        if "simple" in params:
-            kw["simple"] = False
         return cls(**kw)
 
     screw_types = sorted(SocketHeadCapScrew.types())
     screw_type = next((t for t in screw_types if "iso4762" in t.lower()), screw_types[0])
     screw_sizes = sorted(SocketHeadCapScrew.sizes(screw_type))
     screw_size = next((s for s in screw_sizes if s.startswith("M6")), screw_sizes[0])
+    screw_params = inspect.signature(SocketHeadCapScrew.__init__).parameters
     t0 = time.perf_counter()
     cq_screw = make(SocketHeadCapScrew, size=screw_size, length=20.0,
-                    fastener_type=screw_type)
+                    fastener_type=screw_type, **({"simple": False} if "simple" in screw_params else {}))
     parts["cq_screw_s"] = round(time.perf_counter() - t0, 3)
+    cq_screw_simple = None
+    if "simple" in screw_params:
+        t0 = time.perf_counter()
+        cq_screw_simple = make(SocketHeadCapScrew, size=screw_size, length=20.0,
+                               fastener_type=screw_type, simple=True)
+        parts["cq_screw_simple_s"] = round(time.perf_counter() - t0, 3)
 
     wash_types = sorted(PlainWasher.types())
     wash_type = next((t for t in wash_types if "iso7089" in t.lower()), wash_types[0])
@@ -199,8 +211,11 @@ def main():
     # ---- screw comparison / decomposition ----
     RESULTS["screw"] = {
         "soma": screw_decomposition("SOMA Screw ISO 4762 M6x20", sh_of(soma_screw)),
-        "cq_warehouse": screw_decomposition("cq SocketHeadCapScrew M6-1x20", sh_of(cq_screw)),
+        "cq_warehouse": screw_decomposition("cq SocketHeadCapScrew M6-1x20 simple=False", sh_of(cq_screw)),
     }
+    if cq_screw_simple is not None:
+        RESULTS["screw"]["cq_warehouse_simple"] = screw_decomposition(
+            "cq SocketHeadCapScrew M6-1x20 simple=True (Phase 2 variant)", sh_of(cq_screw_simple))
     sv = RESULTS["screw"]["soma"]["stats"]["volume_mm3"]
     cv = RESULTS["screw"]["cq_warehouse"]["stats"]["volume_mm3"]
     RESULTS["screw"]["comparison"] = {
