@@ -110,12 +110,31 @@ def shape_of(obj):
 
 
 def topo_counts(sh):
-    ok, res, err = safe(lambda: {
-        "solids": len(sh.Solids()), "shells": len(sh.Shells()),
-        "faces": len(sh.Faces()), "wires": len(sh.Wires()),
-        "edges": len(sh.Edges()), "vertices": len(sh.Vertices()),
-    }, sh)
-    return res if ok else {"error": err}
+    """Raw TopExp_Explorer counts vs unique (IsSame-deduped) counts.
+    raw > unique proves duplicated topology (the washer defect signature)."""
+    out = {}
+    try:
+        from OCP.TopAbs import (TopAbs_SOLID, TopAbs_SHELL, TopAbs_FACE,
+                                TopAbs_WIRE, TopAbs_EDGE, TopAbs_VERTEX)
+        from OCP.TopExp import TopExp_Explorer
+        wrapped = sh.wrapped if hasattr(sh, "wrapped") else sh
+        for name, ta in (("solids", TopAbs_SOLID), ("shells", TopAbs_SHELL),
+                         ("faces", TopAbs_FACE), ("wires", TopAbs_WIRE),
+                         ("edges", TopAbs_EDGE), ("vertices", TopAbs_VERTEX)):
+            exp = TopExp_Explorer(wrapped, ta)
+            raw = 0
+            uniq = []
+            while exp.More() and raw < 2000:
+                raw += 1
+                s = exp.Current()
+                if not any(s.IsSame(u) for u in uniq):
+                    uniq.append(s)
+                exp.Next()
+            out[name] = raw
+            out[name + "_unique"] = len(uniq)
+    except Exception as e:
+        out["error"] = f"{type(e).__name__}: {e}"
+    return out
 
 
 def face_type_summary(sh):
@@ -179,11 +198,12 @@ def shape_stats(sh):
 
 
 def brepcheck_report(sh):
-    """Walk every sub-shape with BRepCheck_Analyzer and collect the error
-    categories (e.g. BRepCheck_SelfIntersectingWire)."""
-    out = {"whole_valid": None, "status_counts": {}, "examples": []}
+    """BRepCheck diagnostics: analyzer walk with error categories plus
+    direct per-class checker results (BRepCheck_Face/Wire/Shell)."""
+    out = {"whole_valid": None, "status_counts": {}, "examples": [],
+           "direct_checks": {}}
     try:
-        from OCP.BRepCheck import BRepCheck_Analyzer, BRepCheck_ListIteratorOfListOfStatus
+        from OCP.BRepCheck import BRepCheck_Analyzer
     except Exception as e:
         out["error"] = f"import {e}"
         return out
@@ -195,13 +215,16 @@ def brepcheck_report(sh):
         def statuses(res):
             lst = res.Status()
             try:
+                return list(lst)
+            except Exception:
+                pass
+            try:
+                got = []
                 for s in lst:
-                    yield s
-            except TypeError:
-                it = BRepCheck_ListIteratorOfListOfStatus(lst)
-                while it.More():
-                    yield it.Value()
-                    it.Next()
+                    got.append(s)
+                return got
+            except Exception:
+                return []
 
         from OCP.TopAbs import (TopAbs_VERTEX, TopAbs_EDGE, TopAbs_WIRE,
                                 TopAbs_FACE, TopAbs_SHELL, TopAbs_SOLID)
@@ -234,6 +257,37 @@ def brepcheck_report(sh):
         out["status_counts"] = dict(counts)
     except Exception as e:
         out["error"] = f"{type(e).__name__}: {e}\n{traceback.format_exc()[-400:]}"
+
+    # direct per-class checkers -> explicit error categories
+    try:
+        from OCP.BRepCheck import (BRepCheck_Face, BRepCheck_Wire, BRepCheck_Shell)
+        dc = out["direct_checks"]
+        faces = sh.Faces()
+        for i, f in enumerate(faces[:20]):
+            fw = BRepCheck_Face(f.wrapped)
+            dc[f"face_{i}"] = {
+                "intersect_wires": enum_name(fw.IntersectWires()),
+                "classify_wires": enum_name(fw.ClassifyWires()),
+                "orientation_of_wires": enum_name(fw.OrientationOfWires()),
+                "area": fmt(f.Area(), 4),
+            }
+            for j, w in enumerate(f.Wires()[:4]):
+                try:
+                    bw = BRepCheck_Wire(w.wrapped)
+                    dc[f"face_{i}_wire_{j}"] = {
+                        "closed": enum_name(bw.Closed()),
+                        "self_intersect": enum_name(bw.SelfIntersect(f.wrapped)),
+                    }
+                except Exception as e2:
+                    dc[f"face_{i}_wire_{j}"] = f"ERR {e2}"
+        for i, shl in enumerate(sh.Shells()[:10]):
+            bs = BRepCheck_Shell(shl.wrapped)
+            dc[f"shell_{i}"] = {
+                "closed": enum_name(bs.Closed()),
+                "orientation": enum_name(bs.Orientation()),
+            }
+    except Exception as e:
+        out["direct_checks"]["error"] = f"{type(e).__name__}: {e}"
     return out
 
 
@@ -411,6 +465,7 @@ def reimport_stats(path):
     ok_val, sh, err_val = safe(lambda: wp.val())
     if ok_val:
         out["after"] = shape_stats(sh)
+        out["after_brepcheck"] = brepcheck_report(sh)
     else:
         out["after"] = {"empty": True, "val_error": err_val}
     out["step_text"] = step_text_stats(path)
@@ -682,11 +737,41 @@ def washer_controls(d1, d2, h):
                 }
 
     # C4: the exact call cq_warehouse performs (toPending().revolve() with
-    #     cadquery's default axis), instrumented
+    #     cadquery's default axis), instrumented to catch wire duplication
     ok, wp2, err = safe(build_profile)
     if ok:
+        n_wires_before = len(wp2.wires().vals())
+        n_pending_before = len(wp2.ctx.pendingWires)
         wp2 = wp2.toPending()
+        out["C4_wires_on_stack_before_toPending"] = n_wires_before
+        out["C4_pending_wires_before_toPending"] = n_pending_before
         out["C4_pending_wires_after_toPending"] = len(wp2.ctx.pendingWires)
+        try:
+            pw = list(wp2.ctx.pendingWires)
+            out["C4_pending_wires_is_same"] = (
+                pw[0].wrapped.IsSame(pw[1].wrapped) if len(pw) == 2 else None)
+        except Exception as e:
+            out["C4_pending_wires_is_same"] = f"ERR {e}"
+        # what _getFaces() would build from the duplicated pending wires
+        try:
+            from cadquery.occ_impl.shapes import wiresToFaces
+            fl = wiresToFaces(list(wp2.ctx.pendingWires))
+            out["C4_wiresToFaces_count"] = len(fl)
+            out["C4_wiresToFaces_areas"] = [fmt(f.Area(), 4) for f in fl]
+        except Exception as e:
+            out["C4_wiresToFaces"] = f"ERR {type(e).__name__}: {e}"
+        # direct makeFromWires(w, [w]) probe (the exact call wiresToFaces makes)
+        try:
+            w0 = wp2.wires().vals()[0]
+            fdd = cq.Face.makeFromWires(w0, [w0])
+            out["C4c_makeFromWires_w_plus_w"] = {
+                "area_mm2": fmt(fdd.Area(), 4),
+                "wires": len(fdd.Wires()),
+                "valid": fdd.isValid(),
+                "faces_of_result": len(fdd.Faces()),
+            }
+        except Exception as e:
+            out["C4c_makeFromWires_w_plus_w"] = f"ERR {type(e).__name__}: {e}"
         ok2, res2, err2 = safe(lambda: wp2.revolve())
         out["C4_exact_cq_call_revolve"] = {
             "ok": ok2, "error": err2,
@@ -702,7 +787,32 @@ def washer_controls(d1, d2, h):
             "stats": shape_stats(shape_of(res3)) if ok2 else None,
         }
 
-    # C6: inspection of what the real instance returns from make_washer()
+    # C6: standard cadquery pattern WITHOUT toPending (close() already pends
+    #     the wire) - the expected-correct construction
+    ok, wp4, err = safe(build_profile)
+    if ok:
+        ok2, res4, err2 = safe(lambda: wp4.revolve())
+        out["C6_revolve_without_toPending"] = {
+            "ok": ok2, "error": err2,
+            "pending_wires_seen": (len(wp4.ctx.pendingWires) if ok2 else None),
+            "stats": shape_stats(shape_of(res4)) if ok2 else None,
+        }
+
+    # C7: nut-style masking - does a boolean after the doubled revolve
+    #     normalize the defect (why HexNut hides the same pattern)?
+    ok, wp5, err = safe(build_profile)
+    if ok:
+        def masked():
+            r = wp5.toPending().revolve()
+            box = cq.Workplane("XY").box(200, 200, 200, centered=(True, True, False))
+            return r.intersect(box)
+        ok2, res5, err2 = safe(masked)
+        out["C7_revolve_then_intersect"] = {
+            "ok": ok2, "error": err2,
+            "stats": shape_stats(shape_of(res5)) if ok2 else None,
+        }
+
+    # C8: inspection of what the real instance returns from make_washer()
     return out
 
 
@@ -833,6 +943,7 @@ def bearing_probe(inst, tag):
         except Exception:
             pass
     out["components"] = comp_report
+    out["fused_brepcheck"] = brepcheck_report(sh)
     fv = out["fused_stats"].get("volume_mm3")
     out["sum_component_volumes_mm3"] = fmt(total, 4)
     if isinstance(fv, (int, float)):
