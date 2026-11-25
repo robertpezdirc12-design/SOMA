@@ -1,0 +1,25 @@
+# Phase 21 - Specialist 2: SOMA environment/package mechanism test for cq_warehouse 0.8.0.
+# Temporary test workflow: runs only on push to test/phase21-env on GitHub-hosted runners.
+# Evidence only - no SOMA code is changed, results are uploaded as the artifact below.
+name: phase21-sp2-env
+on:
+  push:
+    branches: [test/phase21-env]
+jobs:
+  env-mechanism:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Run SP2 environment/package mechanism test
+        run: bash test/phase21/sp2_env_test.sh
+      - name: Upload results (logs + results.json)
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: sp2-env-results
+          path: ${{ runner.temp }}/sp2out/
+          if-no-files-found: warn
