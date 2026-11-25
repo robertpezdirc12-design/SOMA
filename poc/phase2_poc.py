@@ -55,7 +55,7 @@ def try_variants(name, variants):
 
 
 def first_sizes(cls, fastener_type, prefer="M6"):
-    sizes = list(cls.sizes(fastener_type))
+    sizes = sorted(cls.sizes(fastener_type))
     for s in sizes:
         if s.startswith(prefer):
             return s, sizes
@@ -113,7 +113,7 @@ def inventory():
         classes = {}
         for cls in base.__subclasses__():
             entry = {}
-            for t in cls.types():
+            for t in sorted(cls.types()):
                 try:
                     entry[t] = len(cls.sizes(t))
                 except Exception:
@@ -146,7 +146,8 @@ def creation_tests():
     def variants_for(cls, size, lengths):
         v = []
         params = inspect.signature(cls.__init__).parameters
-        t = cls.types()[0] if cls.types() else None
+        types = sorted(cls.types())
+        t = types[0] if types else None
         for length in lengths:
             kw = {"size": size}
             if "length" in params:
@@ -161,9 +162,10 @@ def creation_tests():
     parts = {}
     # screw
     screw_cls = SocketHeadCapScrew
-    t = screw_cls.types()[0]
+    screw_types = sorted(screw_cls.types())
+    t = screw_types[0]
     size, sizes = first_sizes(screw_cls, t)
-    RESULTS.setdefault("inventory", {})["socket_head_cap_types"] = screw_cls.types()
+    RESULTS.setdefault("inventory", {})["socket_head_cap_types"] = screw_types
     RESULTS["inventory"]["socket_head_cap_sizes_sample"] = sizes[:8]
     screw = try_variants("create SocketHeadCapScrew", variants_for(screw_cls, size, [20.0, 16.0, 12.0, 10.0]))
     if screw is not None:
@@ -172,9 +174,10 @@ def creation_tests():
 
     # nut
     nut_cls = HexNut
-    t = nut_cls.types()[0]
+    nut_types = sorted(nut_cls.types())
+    t = nut_types[0]
     size, sizes = first_sizes(nut_cls, t)
-    RESULTS["inventory"]["hex_nut_types"] = nut_cls.types()
+    RESULTS["inventory"]["hex_nut_types"] = nut_types
     RESULTS["inventory"]["hex_nut_sizes_sample"] = sizes[:8]
     nut = try_variants("create HexNut", variants_for(nut_cls, size, [None]) if "length" not in inspect.signature(nut_cls.__init__).parameters else [])
     if nut is None:
@@ -191,9 +194,10 @@ def creation_tests():
 
     # washer
     wash_cls = PlainWasher
-    t = wash_cls.types()[0]
+    wash_types = sorted(wash_cls.types())
+    t = wash_types[0]
     size, sizes = first_sizes(wash_cls, t)
-    RESULTS["inventory"]["plain_washer_types"] = wash_cls.types()
+    RESULTS["inventory"]["plain_washer_types"] = wash_types
     params = inspect.signature(wash_cls.__init__).parameters
     kw = {"size": size}
     if "fastener_type" in params:
@@ -208,9 +212,10 @@ def creation_tests():
     # heat-set insert
     hs_cls = HeatSetNut
     try:
-        t = hs_cls.types()[0]
+        hs_types = sorted(hs_cls.types())
+        t = hs_types[0]
         size, sizes = first_sizes(hs_cls, t)
-        RESULTS["inventory"]["heatset_types"] = hs_cls.types()
+        RESULTS["inventory"]["heatset_types"] = hs_types
         RESULTS["inventory"]["heatset_sizes_sample"] = sizes[:8]
     except Exception:
         t, size = None, None
@@ -229,9 +234,10 @@ def creation_tests():
     # bearing
     b_cls = SingleRowDeepGrooveBallBearing
     try:
-        t = b_cls.types()[0]
+        b_types = sorted(b_cls.types())
+        t = b_types[0]
         size, sizes = first_sizes(b_cls, t)
-        RESULTS["inventory"]["bearing_types"] = b_cls.types()
+        RESULTS["inventory"]["bearing_types"] = b_types
         RESULTS["inventory"]["bearing_sizes_sample"] = sizes[:8]
         bearing = try_variants("create SingleRowDeepGrooveBallBearing",
                                [("direct", lambda: b_cls(size=size, bearing_type=t))])
