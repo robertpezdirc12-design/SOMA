@@ -153,13 +153,21 @@ def main():
     parts["soma_washer_s"] = round(time.perf_counter() - t0, 3)
 
     # cq_warehouse: discover the exact size/type strings like the Phase 2 POC did
+    import inspect
+
+    def make(cls, **kw):
+        params = inspect.signature(cls.__init__).parameters
+        if "simple" in params:
+            kw["simple"] = False
+        return cls(**kw)
+
     screw_types = sorted(SocketHeadCapScrew.types())
     screw_type = next((t for t in screw_types if "iso4762" in t.lower()), screw_types[0])
     screw_sizes = sorted(SocketHeadCapScrew.sizes(screw_type))
     screw_size = next((s for s in screw_sizes if s.startswith("M6")), screw_sizes[0])
     t0 = time.perf_counter()
-    cq_screw = SocketHeadCapScrew(size=screw_size, length=20.0,
-                                  fastener_type=screw_type, simple=False)
+    cq_screw = make(SocketHeadCapScrew, size=screw_size, length=20.0,
+                    fastener_type=screw_type)
     parts["cq_screw_s"] = round(time.perf_counter() - t0, 3)
 
     wash_types = sorted(PlainWasher.types())
@@ -167,7 +175,7 @@ def main():
     wash_sizes = sorted(PlainWasher.sizes(wash_type))
     wash_size = next((s for s in wash_sizes if s.startswith("M6")), wash_sizes[0])
     t0 = time.perf_counter()
-    cq_washer = PlainWasher(size=wash_size, fastener_type=wash_type, simple=False)
+    cq_washer = make(PlainWasher, size=wash_size, fastener_type=wash_type)
     parts["cq_washer_s"] = round(time.perf_counter() - t0, 3)
 
     RESULTS["creation"] = parts
