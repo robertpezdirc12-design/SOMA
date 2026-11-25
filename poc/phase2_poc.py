@@ -295,6 +295,35 @@ def roundtrip(parts):
     if not parts:
         RESULTS["roundtrip"] = "skipped: no parts created"
         return
+
+    step = "poc_assembly.step"
+
+    # per-part round-trip: catches which part changes
+    per_part = {}
+    for name, p in parts.items():
+        sh = p.val() if hasattr(p, "val") else p
+        v0 = sh.Volume()
+        try:
+            a = cq.Assembly()
+            a.add(sh, name=name, color=cq.Color(0.8, 0.8, 0.8, 1.0))
+            if hasattr(a, "export"):
+                a.export(f"poc_{name}.step")
+            else:
+                a.save(f"poc_{name}.step")
+            wp = cq.importers.importStep(f"poc_{name}.step")
+            solids = wp.solids().vals()
+            v1 = sum(s.Volume() for s in solids)
+            per_part[name] = {
+                "volume_before": round(v0, 3),
+                "volume_after": round(v1, 3),
+                "rel_delta": f"{abs(v1 - v0) / v0:.2e}" if v0 else None,
+                "solids_out": len(solids),
+                "all_valid": all(s.isValid() for s in solids),
+            }
+        except Exception as e:
+            per_part[name] = {"error": f"{type(e).__name__}: {e}"}
+    RESULTS["roundtrip_per_part"] = per_part
+
     try:
         from cq_warehouse.bearing import SingleRowDeepGrooveBallBearing
     except Exception:
@@ -308,7 +337,6 @@ def roundtrip(parts):
         a.add(sh, name=name, loc=cq.Location(cq.Vector(60 * i, 0, 0)),
               color=cq.Color(0.8, 0.8, 0.8, 1.0))
     t0 = time.perf_counter()
-    step = "poc_assembly.step"
     try:
         if hasattr(a, "export"):
             a.export(step)
@@ -326,17 +354,19 @@ def roundtrip(parts):
     RESULTS["roundtrip"]["import_seconds"] = round(time.perf_counter() - t0, 3)
     solids = wp.solids().vals()
     after_vol = sum(s.Volume() for s in solids)
+    invalid = [i for i, s in enumerate(solids) if not s.isValid()]
     bb = wp.val().BoundingBox() if hasattr(wp.val(), "BoundingBox") else None
     rel = abs(after_vol - before_vol) / before_vol if before_vol else None
     RESULTS["roundtrip"].update({
         "parts_in": len(parts),
         "solids_out": len(solids),
+        "invalid_solid_indices": invalid,
         "volume_before_mm3": round(before_vol, 3),
         "volume_after_mm3": round(after_vol, 3),
         "volume_rel_delta": f"{rel:.2e}" if rel is not None else None,
         "bbox_after_mm": [round(bb.xlen, 3), round(bb.ylen, 3), round(bb.zlen, 3)] if bb else None,
-        "all_solids_valid": all(s.isValid() for s in solids),
-        "pass_1e-6": bool(rel is not None and rel < 1e-6 and len(solids) == len(parts)),
+        "all_solids_valid": not invalid,
+        "pass_1e-6": bool(rel is not None and rel < 1e-6 and not invalid),
     })
     print("## STEP round-trip\n", json.dumps(RESULTS["roundtrip"], indent=2))
 
@@ -379,11 +409,11 @@ def soma_comparison(parts):
     res["standards_seconds"] = round(time.perf_counter() - t0, 3)
 
     for label, thunk in (
-        ("SOMA Screw ISO 4762 M6x20", lambda: sf.Screw("ISO 4762", "M6", 20)),
-        ("SOMA Screw ISO 4762 M6x20 (size string)", lambda: sf.Screw("ISO 4762", "M6x20")),
-        ("SOMA Nut ISO 4032 M6", lambda: sf.Nut("ISO 4032", "M6")),
-        ("SOMA Washer ISO 7089 M6", lambda: sf.Washer("ISO 7089", "M6")),
-        ("SOMA HeatSetInsert M3", lambda: sf.HeatSetInsert("M3")),
+        ("SOMA Screw ISO 4762 M6x20", lambda: sf.Screw("ISO 4762", "M6", 20, at=(0, 0, 0))),
+        ("SOMA Screw ISO 4762 M6x20 (size string)", lambda: sf.Screw("ISO 4762", "M6x20", at=(0, 0, 0))),
+        ("SOMA Nut ISO 4032 M6", lambda: sf.Nut("ISO 4032", "M6", at=(0, 0, 0))),
+        ("SOMA Washer ISO 7089 M6", lambda: sf.Washer("ISO 7089", "M6", at=(0, 0, 0))),
+        ("SOMA HeatSetInsert M3x5.7", lambda: sf.HeatSetInsert("M3x5.7", at=(0, 0, 0))),
     ):
         t0 = time.perf_counter()
         try:
@@ -399,7 +429,7 @@ def soma_comparison(parts):
     # like-for-like volume/bbox comparison where both exist
     comp = {}
     try:
-        soma_screw = shape_of(sf.Screw("ISO 4762", "M6", 20))
+        soma_screw = shape_of(sf.Screw("ISO 4762", "M6", 20, at=(0, 0, 0)))
         ss = part_stats(soma_screw)
         comp["screw_M6x20"] = {"soma": ss}
         for key, obj in parts.items():
