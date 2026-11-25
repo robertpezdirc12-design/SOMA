@@ -1,8 +1,10 @@
 # Temporary verification workflow (test branch only, not part of the PR).
 # Runs the same checks as checks.yml: typecheck + unit tests.
+# Trigger: push to this test branch only (workflow_dispatch would need the file on the default branch).
 name: Phase1 checks (temporary)
 on:
-  workflow_dispatch:
+  push:
+    branches: [test/phase1-checks]
 permissions:
   contents: read
 jobs:
