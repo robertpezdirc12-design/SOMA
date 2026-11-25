@@ -1,0 +1,54 @@
+# Temporary Phase 2.1 SP1 geometry QA workflow (test branch only, not part of any PR).
+# cq_warehouse 0.8.0 geometry validation on SOMA's pinned stack
+# (cadquery 2.8.0, cadquery-ocp 7.9.3.1.1), Python 3.12, ubuntu-latest.
+# Push-triggered on the dedicated test branch; nothing runs locally.
+name: Phase21 SP1 geometry QA (temporary)
+on:
+  push:
+    branches: [test/phase21-geometry]
+permissions:
+  contents: read
+jobs:
+  geometry-qa:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          path: poc-src
+
+      # SOMA sources for the washer comparison (read-only, pinned to the reviewed commit)
+      - uses: actions/checkout@v5
+        with:
+          repository: robertpezdirc8-prog/SOMA
+          ref: cf8e629ef0dc1c2c54ee3fb62d50a208aa938c27
+          path: soma-src
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install pinned stack (SOMA base versions) and cq_warehouse 0.8.0
+        run: |
+          python -m pip install --upgrade pip
+          pip install "cadquery==2.8.0" "cadquery-ocp==7.9.3.1.1" "cadquery-ocp-proxy==7.9.3.1.1"
+          pip install "git+https://github.com/gumyr/cq_warehouse.git@a307044f91c9cc5433fde92cb1fa145c01b2bde7"
+          python -c "import cadquery, cadquery.ocp, cq_warehouse, importlib.metadata as m; print('cadquery', m.version('cadquery')); print('cadquery-ocp', m.version('cadquery-ocp')); print('cq-warehouse', m.version('cq-warehouse'))"
+
+      - name: Run geometry QA
+        run: python poc-src/poc/phase21_sp1_geometry.py
+
+      - name: Run summary
+        if: always()
+        run: |
+          if [ -f phase21-sp1-summary.md ]; then cat phase21-sp1-summary.md; fi
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: phase21-sp1-geometry
+          path: |
+            phase21-sp1-results.json
+            phase21-sp1-sources.txt
+            phase21-sp1-summary.md
+          if-no-files-found: warn
