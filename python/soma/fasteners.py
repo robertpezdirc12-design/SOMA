@@ -65,6 +65,9 @@ COARSE_PITCH = {
 }
 
 # Kopf: socket (Zylinderkopf), button (Linsenkopf), countersunk (Senkkopf), hex (Sechskant), set (Gewindestift)
+# Teilgewinde: ISO 4014 und DIN 931 sind nur bis zur Haelfte Gewinde, der Rest ist glatter Schaft
+PARTIAL_THREAD = ("iso4014", "din931")
+
 SCREWS = {
     "iso4762": dict(name="ISO 4762", title="Socket head cap screw", table="socket_head_cap_parameters.csv",
                     col="iso4762", head="socket", cols=("dk", "k", "s", "t")),
@@ -202,10 +205,18 @@ def _norm_standard(standard, table, kind):
 _SIZE = re.compile(r"^\s*M\s*(\d+(?:[.,]\d+)?)\s*(?:[xX×*]\s*(\d+(?:[.,]\d+)?)\s*(?:mm)?)?\s*$", re.IGNORECASE)
 
 
+_PITCHED = re.compile(r"^\s*M\s*(\d+(?:[.,]\d+)?)\s*[xX×*]\s*(\d+(?:[.,]\d+)?)\s*[xX×*]\s*(\d+(?:[.,]\d+)?)\s*(?:mm)?\s*$")
+
+
 def _parse_size(size, length, kind):
     """"M3" oder "M3x10" (auch "M3 x 10", "M3×10") -> (3.0, Laenge oder None)."""
     if not isinstance(size, str):
         raise ValueError(f"{kind}: give the size as text, e.g. \"M3\" or \"M3x10\", not {size!r}")
+    pitched = _PITCHED.match(size)
+    if pitched:  # M10x1,25x40: Steigung und Laenge. Feinheiten gibt es hier nicht, also klar sagen
+        raise ValueError(f"{kind}: {size.strip()!r} has a pitch and a length, and fine pitches are not supported "
+                         f"(no thread is modelled). Use the coarse thread, e.g. \"M{_fmt(_num(pitched.group(1)))}x"
+                         f"{_fmt(_num(pitched.group(3)))}\", or model the special part yourself")
     m = _SIZE.match(size)
     if not m:
         raise ValueError(f"{kind}: cannot read the size {size!r}. Expected e.g. \"M3\" or \"M3x10\"")
@@ -214,6 +225,11 @@ def _parse_size(size, length, kind):
         from_size = _num(m.group(2))
         if length is not None and abs(float(length) - from_size) > 1e-9:
             raise ValueError(f"{kind}: length given twice with different values ({size!r} and length={length})")
+        # M10x1,25 ist keine 1,25 mm lange Schraube: das ist die Steigung
+        if length is None and from_size < min(3.0, 0.5 * d):
+            raise ValueError(f"{kind}: in {size.strip()!r} the {_fmt(from_size)} mm looks like a pitch, not a length. "
+                             f"Fine pitches are not supported (no thread is modelled). Use the coarse thread, e.g. "
+                             f"\"M{_fmt(d)}x10\", or model the special part yourself")
         length = from_size
     return d, (float(length) if length is not None else None)
 
@@ -288,8 +304,15 @@ def _clearance(d, fit):
     return rows[0][3][FITS[fit]]
 
 
-def _tap_drill(d):
-    return _lookup("tap_hole_sizes.csv", None, ("Soft",), d, "Tap drill hole")["Soft"]
+TAP_MATERIALS = {"soft": "Soft", "hard": "Hard"}
+
+
+def _tap_drill(d, material="soft"):
+    """Kernloch: "soft" fuer Aluminium, Kunststoff und Messing, "hard" fuer Stahl. Die Tabelle fuehrt beide."""
+    col = TAP_MATERIALS.get(str(material).lower())
+    if col is None:
+        raise ValueError(f"tap drill: material is \"soft\" or \"hard\", not {material!r}")
+    return _lookup("tap_hole_sizes.csv", None, (col,), d, "Tap drill hole")[col]
 
 
 @functools.cache
@@ -652,6 +675,19 @@ class Screw(_Part):
         return self.dims["s"]
 
     @property
+    def thread_length(self):
+        """Length of the thread. Fully threaded screws: the whole shank. ISO 4014 and DIN 931 are partially threaded,
+        and the standard gives the thread as 2d + 6 up to 125 mm length, 2d + 12 up to 200 mm, 2d + 25 above that.
+
+        The shape is a plain cylinder either way — SOMA models no threads — so this number is for a drawing note, a
+        FEM bolt or a parts list, not for the geometry.
+        """
+        if self.standard_key not in PARTIAL_THREAD:
+            return self.length
+        extra = 6 if self.length <= 125 else 12 if self.length <= 200 else 25
+        return min(self.length, 2 * self.d + extra)
+
+    @property
     def shank_length(self):
         """Length from the seat to the end of the shank. For a shoulder screw the threaded end comes on top of
         the shoulder length, so this is longer than `length`."""
@@ -683,8 +719,12 @@ class Screw(_Part):
 
     @property
     def tap_drill(self):
-        """Tap drill diameter for the coarse thread."""
+        """Tap drill diameter for the coarse thread in soft material (aluminium, plastic, brass)."""
         return _tap_drill(self.d)
+
+    def tap_drill_for(self, material="soft"):
+        """Tap drill diameter in "soft" (default) or "hard" material (steel). The table has both."""
+        return _tap_drill(self.d, material)
 
     def _local(self):
         return _screw_local(self.head, self.d, self.length, self.pitch, tuple(sorted(self.dims.items())))
@@ -724,10 +764,13 @@ class Screw(_Part):
         bottom = self._zs - depth if depth is not None else -(self.length + 1.0)
         return self._world(_cyl(self.shoulder + fit + oversize, bottom, self._zs + MARGIN))
 
-    def tap_hole(self, depth=None, diameter=None, oversize=0.0):
+    def tap_hole(self, depth=None, diameter=None, oversize=0.0, material="soft"):
         """Tool for cut(): tap drill hole for a thread (or for screwing into plastic with your own `diameter`).
-        depth: depth from the surface, default to 3 pitches beyond the end of the shank."""
-        dia = (diameter or self.tap_drill) + oversize
+
+        depth     depth from the surface, default to 3 pitches beyond the end of the shank
+        material  "soft" (aluminium, plastic, brass) or "hard" (steel): the table gives a different drill
+        """
+        dia = (diameter or _tap_drill(self.d, material)) + oversize
         bottom = self._zs - depth if depth is not None else -(self.shank_length + 3 * self.pitch)
         return self._world(_cyl(dia, bottom, self._zs + MARGIN))
 
@@ -843,6 +886,15 @@ class Washer(_Part):
 
     def _local(self):
         return _ring_local(self.inner, self.outer_diameter, self.thickness)
+
+    def trap(self, clearance=0.2, depth=None):
+        """Tool for cut(): recess for the washer, `clearance` on the diameter per side and in depth.
+
+        A recessed washer sits below the surface so a screw head does not stand proud. `depth` from the surface,
+        default: the thickness plus the clearance.
+        """
+        deep = depth if depth is not None else self.thickness + clearance
+        return self._world(_cyl(self.outer_diameter + 2 * clearance, self._zs - deep, self._zs + MARGIN))
 
 
 def _inserts(brand):

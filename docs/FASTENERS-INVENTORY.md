@@ -105,12 +105,12 @@ The low profile series in the table is **OpenBuilds, not DIN 7984**: the head is
 instead of quietly handing out different dimensions. Pan head and cheese head (`pan_head_parameters.csv`,
 `cheese_head_parameters.csv`) are still missing — one table and one head branch each.
 
-**G4. `ISO 4014` / `DIN 931` are modelled as fully threaded.** Both are partially threaded in reality: the shank
-below the head is plain, the thread starts after a defined length. `SCREWS` maps all three hex standards to the
-same `head="hex"` cylinder path (`_screw_local`), so `Screw.lengths` and the clamping length are right but the
-thread length is not represented. For a viewer this is invisible; for a BOM, a drawing note or a FEM bolt it is
-wrong. Either add `thread_length` from `hex_head_parameters.csv` and expose it, or document the simplification
-explicitly in the `standard-parts` skill.
+**G4. `ISO 4014` / `DIN 931` are modelled as fully threaded.** ✅ **Done, as the second option.** The table has no
+thread-length column, so there was nothing to read: `Screw.thread_length` now computes the standard value
+(2d + 6 up to 125 mm, 2d + 12 up to 200 mm, 2d + 25 above) for those two standards and returns the full length for the
+rest. The geometry is unchanged and always was a plain cylinder — SOMA models no threads — so this closes the gap for a
+drawing note, a FEM bolt and a parts list, which is where the missing number actually hurt. Documented in the skill:
+use `thread_length`, not `shank_length`.
 
 ### P2 — needed regularly, cheap to add
 
@@ -136,20 +136,18 @@ correct O-ring groove is hard to get right by hand, and SOMA already has the cut
 washer, internal-tooth lock washer. Each is one table row set plus a small geometry branch; `NUTS` and `WASHERS`
 are dictionaries built for exactly this.
 
-**G9. `Washer` has no `trap()`.** `Nut` and `HeatSetInsert` both provide the pocket for their own part;
-`Washer` does not, so a recessed washer has to be cut by hand. Inconsistent with the rest of the API.
+**G9. `Washer` has no `trap()`.** ✅ **Done** — `washer.trap(clearance=0.2, depth=None)`, a round pocket of
+`outer_diameter + 2 × clearance` and `thickness + clearance` deep, open to the surface when the washer is `sunk`.
+Same pattern as `Nut.trap()`.
 
-**G10. `tap_hole()` only reads the `Soft` column.** `_tap_drill()` hardcodes `("Soft",)` from
-`tap_hole_sizes.csv`. Tapping steel needs the harder-material drill, which is a different value. A `material=`
-argument (`"soft"` default, `"hard"`) closes this without touching the tables.
+**G10. `tap_hole()` only reads the `Soft` column.** ✅ **Done** — `tap_hole(material="hard")` and
+`tap_drill_for("hard")`; `tap_drill` still means soft, so nothing that already worked changed. M6 is 5.0 mm in
+aluminium and 5.4 mm in steel, and a wrong drill in steel tears the tap.
 
-**G11. Fine pitches cannot be expressed, and the error misleads.** `COARSE_PITCH` (`fasteners.py:53`) has one pitch
-per diameter, and `_SIZE` accepts only `M<d>` or `M<d>x<length>` — a second `x` group does not parse. So
-`Screw("ISO 4762", "M10x1.25x40")` fails with "cannot read the size", while `Screw("ISO 4762", "M10x1.25")` is read
-as **M10 with length 1.25 mm** and rejected with "1.25 mm is not a standard length". Verified against the module.
-The limitation is acceptable (SOMA models no threads), but the message sends the user looking for a length that was
-never meant. Detect a pitch-shaped second group and say "fine pitches are not supported, use the coarse thread or
-model it yourself".
+**G11. Fine pitches cannot be expressed, and the error misleads.** ✅ **Done.** The limitation stays — SOMA models no
+threads — but the message no longer lies. `"M10x1.25x40"` (pitch *and* length) is recognised as such, and
+`"M10x1.25"` is no longer read as M10 with a 1.25 mm length: a second number below `min(3, d/2)` is treated as a
+pitch. Both say that fine pitches are not supported and give the coarse designation to use instead.
 
 ### P3 — domain-specific, only on demand
 
@@ -181,7 +179,8 @@ This is worth stating once in the `standard-parts` skill so agents stop "improvi
 | "Do not duplicate functionality" | Confirmed: importing `cq_warehouse` would duplicate all four classes. |
 | Runtime change | **None needed.** New families are new modules in `python/soma/`, reading new CSVs from the same `data/fasteners/` folder under the same Apache-2.0 notice. No new pip dependency. |
 
-Status: G1, G2, G3 (shoulder and low profile), G5 and G6 are implemented. The rest are open, in the order above.
+Status: G1, G2, G3 (shoulder and low profile), G4, G5, G6, G9, G10 and G11 are implemented. G7, G8 and the rest are
+open, in the order above.
 
 ### Recommended order
 
@@ -192,8 +191,10 @@ Status: G1, G2, G3 (shoulder and low profile), G5 and G6 are implemented. The re
 3. ~~**G5, G6**~~ — **done** (`RetainingRing`, `ShaftKey`). Two tables plus two geometry branches, as estimated;
    the only surprise was which of the two key depth columns belongs to the shaft.
 4. ~~**G3 (shoulder screw, low profile)**~~ — **done**; pan head and cheese head remain, one table each.
-5. **G7, G8, G9, G10, G11** — consistency and correctness of what already exists.
-6. **G12–G14** — only against a concrete model that needs them.
+5. ~~**G9, G10, G11**~~ — **done**. Small, and each one removed a way to get a wrong number or a misleading error.
+   **G4** went the documentation route: the table has no thread length to read.
+6. **G7 (O-rings), G8 (nut and washer variants)** — the two families still missing.
+7. **G12–G14** — only against a concrete model that needs them.
 
 ### Licensing note
 

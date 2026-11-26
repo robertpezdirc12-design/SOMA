@@ -40,8 +40,10 @@ add_part("Screw 1", s, group="Hardware")               # role "hardware" automat
   ISO 4017, ISO 4014, DIN 931 (hex head), ISO 4026 (set screw). Nuts ISO 4032, thin ISO 4035, high ISO 4033, square
   DIN 557. Washers ISO 7089, large ISO 7093 on soft material. Inserts by ruthex (default), CNCKitchen, McMaster-Carr,
   Hilitchi. In prints, heat-set inserts instead of nuts where the screw is opened often.
+- Tapping into metal: `s.tap_hole(material="hard")` for steel, the default `"soft"` is for aluminium, brass and
+  plastic. The two drills differ (M6: 5.0 against 5.4 mm), and using the soft one in steel makes the tap tear.
 - Read sizes from the objects instead of typing numbers: `s.head_diameter`, `s.head_height`, `s.key`, `s.clearance()`,
-  `nut.key`, `nut.height`, `ins.diameter`, `ins.length`.
+  `s.tap_drill`, `s.thread_length`, `nut.key`, `nut.height`, `ins.diameter`, `ins.length`.
 - Only standard lengths: `pick_length("ISO 4762", "M3", min_length, max_length)` returns the shortest that fits.
   Through a nut at least grip + washers + nut height + 2 × pitch, into an insert between grip + half and grip + the
   whole insert length.
@@ -53,6 +55,9 @@ add_part("Screw 1", s, group="Hardware")               # role "hardware" automat
 `nut.trap(clearance=0.2)` is the pocket for the nut, open to the surface with `sunk=True`. With `slot="+X",
 slot_length=…` the nut slides in from the side. At `angle=0` two flats are parallel to X, so a slot along X is exactly
 as wide as the nut. For a slot along Y use `angle=30`.
+
+`washer.trap(clearance=0.2)` is the same idea for a recessed washer: a round pocket so the washer sits below the
+surface and the screw head does not stand proud.
 
 ## Bearings: `Bearing(designation, at=...)`
 
@@ -158,11 +163,14 @@ Three simplifications to know about:
 
 - **No threads anywhere.** The shank is the nominal diameter, the bore of a nut is nominal, the tap drill is real. That
   is deliberate: a modelled thread costs hundreds of thousands of triangles and no slicer resolves it.
-- **ISO 4014 and DIN 931 are modelled fully threaded**, although the real bolt has a plain shank below the head. Fine
-  for a picture and for a clearance hole; wrong if someone reads a thread length off the model. Say so if it matters.
-- **Fine pitches are not supported.** Only coarse threads exist. `Screw("ISO 4762", "M10x1.25x40")` is rejected as
-  unreadable, and `"M10x1.25"` is read as M10 with a length of 1.25 mm and rejected as a non-standard length — the
-  second message is misleading, it is not about the length. Use the coarse thread, or model the special case yourself.
+- **ISO 4014 and DIN 931 are partially threaded in reality**, with a plain shank below the head. The shape is a plain
+  cylinder either way, so nothing is lost in the picture, but the thread does not end where the model suggests:
+  `s.thread_length` gives the standard value (2d + 6 up to 125 mm, 2d + 12 up to 200 mm, 2d + 25 above that), so a
+  drawing note or a FEM bolt can use it. Use that number, not `shank_length`.
+- **Fine pitches are not supported.** Only coarse threads exist. `"M10x1.25x40"` and `"M10x1.25"` are both rejected
+  with a message that says the number looks like a pitch and what to do instead — earlier the second one was read as
+  M10 with a 1.25 mm length, which sent you looking for a length that was never meant. Use the coarse thread, or model
+  the special case yourself.
 
 ## Keeping the parts list
 

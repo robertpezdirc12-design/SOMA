@@ -20,7 +20,7 @@ const py = (args, opts = {}) => spawnSync(PY, ['-m', 'soma', ...args], {
 const LIB_CHECKS = String.raw`
 import json
 import cadquery as cq
-from soma.fasteners import Screw, RetainingRing, ShaftKey, lengths, standards, _plain_rows
+from soma.fasteners import Screw, Washer, RetainingRing, ShaftKey, lengths, standards, _plain_rows
 
 def out(label, ok, detail=""):
     print(json.dumps([label, bool(ok), str(detail)[:110]]), flush=True)
@@ -154,6 +154,37 @@ out("ShaftKey(20, 40) und ShaftKey(\"DIN 6885\", 20, 40) sind dasselbe",
     ShaftKey(20, 40, at=(0, 0, 0)).designation == ShaftKey("DIN 6885", 20, 40, at=(0, 0, 0)).designation
     == "DIN 6885 6x6x40")
 
+# --- G9, G10, G11, G4: Werkzeuge und Meldungen -------------------------------------------------------------
+
+s6 = Screw("ISO 4762", "M6x20", at=(0, 0, 0))
+soft, hard = s6.tap_drill, s6.tap_drill_for("hard")
+out("Kernloch: Stahl bekommt einen anderen Bohrer als Aluminium (M6: 5,0 gegen 5,4)",
+    near(soft, 5.0, 1e-9) and near(hard, 5.4, 1e-9)
+    and near(bb(s6.tap_hole())[1] - bb(s6.tap_hole())[0], soft, 1e-6)
+    and near(bb(s6.tap_hole(material="hard"))[1] - bb(s6.tap_hole(material="hard"))[0], hard, 1e-6),
+    (soft, hard))
+out("tap_hole kennt nur weich und hart", raises(lambda: s6.tap_hole(material="wood")))
+
+w = Washer("ISO 7089", "M3", at=(0, 0, 0))
+wb = bb(w.trap())
+out("Washer.trap: rundes Lager fuer eine versenkte Scheibe",
+    near(wb[1] - wb[0], w.outer_diameter + 0.4, 1e-6) and near(wb[5] - wb[4], w.thickness + 0.2 + 1.0, 1e-6),
+    (round(wb[1] - wb[0], 2), round(wb[5] - wb[4], 2)))
+
+msgs = []
+for bad in ("M10x1.25x40", "M10x1.25"):
+    try:
+        Screw("ISO 4762", bad, at=(0, 0, 0))
+    except ValueError as e:
+        msgs.append("pitch" in str(e) and "coarse" in str(e))
+out("Feinheiten werden als Steigung erkannt und erklaert, nicht als Laenge", len(msgs) == 2 and all(msgs), msgs)
+
+out("Gewindelaenge: ISO 4014 und DIN 931 nach der Regel 2d+6, ISO 4017 ganz",
+    near(Screw("ISO 4014", "M10x50", at=(0, 0, 0)).thread_length, 26, 1e-9)
+    and near(Screw("DIN 931", "M16x100", at=(0, 0, 0)).thread_length, 38, 1e-9)
+    and near(Screw("ISO 4017", "M10x50", at=(0, 0, 0)).thread_length, 50, 1e-9),
+    (Screw("ISO 4014", "M10x50", at=(0, 0, 0)).thread_length, Screw("ISO 4017", "M10x50", at=(0, 0, 0)).thread_length))
+
 st = standards()
 out("standards() nennt die neuen Familien",
     "DIN 471" in st["retaining_rings"] and "DIN 472" in st["retaining_rings"]
@@ -178,7 +209,7 @@ for (const line of lines) {
   const [label, ok, detail] = JSON.parse(line);
   check(label, ok, detail);
 }
-check('Python-Prüfungen liefen durch', lib.status === 0 && lines.length >= 16,
+check('Python-Prüfungen liefen durch', lib.status === 0 && lines.length >= 21,
   lib.status === 0 ? `${lines.length} Prüfungen` : (lib.stderr ?? '').slice(-300));
 
 const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'soma-hardware-'));
