@@ -819,8 +819,12 @@ def build_all(root, only=None, dpi=DPI):
 
 
 def find(root, name):
+    """Das Blatt zu einem Namen: der Name des Blatts, seine Kennung, seine Datei (auch ohne drawings/ und .py) oder eine
+    seiner Ausgabedateien. Der Dateiname zaehlt mit, weil er der kuerzere Griff ist: `soma drawing build assembly`."""
     for x in read_index(root).get("drawings", []):
         if name in (x["name"], x["id"]) or Path(name).as_posix() in (x["file"], x["pdf"], x["dxf"]):
+            return x
+        if Path(x["file"]).stem == name:
             return x
     return None
 

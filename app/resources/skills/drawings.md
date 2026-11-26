@@ -101,6 +101,9 @@ sh.text("Deburr all edges", (30, 30))
   is a chain. Never close a chain: leave one out or make it auxiliary.
 - Small dimensions near the part, bigger ones outside: first line about 10 mm from the edge, then 7 to 8 mm steps
   (`offset`). Dimension lines do not cross each other, texts never sit on edges.
+- A text that is longer than the distance it measures (a Ø10 with 13 mm of text) does not fit between the arrows:
+  `text_at=(x, y)` moves it out and `leader=True` draws the line from the text to the dimension. Without `leader` the
+  text moves alone and stands unattached. For a circle, `text_at` along the `angle` ray needs no leader.
 - Diameters with `view.diameter(center, r)` where the hole is a circle, on a side view a linear dimension with
   `"Ø<>"`. Radii with `view.radius(center, r)`. `angle=` is the direction from the center to the text (0 right, 90 up),
   pointing away from other dimensions and edges. Patterns: one dimension `"4x <>"`, positions from a datum or the

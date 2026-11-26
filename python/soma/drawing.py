@@ -867,7 +867,7 @@ class View:
 
     # -- Maße
 
-    def dim(self, p1, p2, offset=10, direction=None, text=None, tol=None, text_at=None):
+    def dim(self, p1, p2, offset=10, direction=None, text=None, tol=None, text_at=None, leader=False):
         """Linear dimension between two model points; the value is measured, not typed.
 
         offset     distance in mm on the sheet from the outer point to the dimension line. Positive: above (horizontal)
@@ -878,6 +878,9 @@ class View:
                    "<> ±0.1", "2x <>"
         tol        0.1 for ±0.1 or (0.1, -0.05) for +0.1/-0.05 in small text after the value
         text_at    optional point on the sheet for the text instead of the middle
+        leader     True: a leader from the text to the dimension line. Needed when text_at moves the text out of the
+                   dimension, e.g. a text that is longer than the distance it measures: without it the text stands
+                   alone, with it a line joins the two
 
         Across a break of the view the dimension shows the full length of the model."""
         file, line = _where()
@@ -905,9 +908,9 @@ class View:
             dim = msp.add_aligned_dim(p1=tuple(a), p2=tuple(b), distance=offset, **self._dimargs(text, measured, shown))
         else:
             raise ValueError(f"direction must be \"h\", \"v\" or \"aligned\", not {direction!r}")
-        return self._finish(dim, "linear", measured, text, tol, text_at, [p1, p2], file, line)
+        return self._finish(dim, "linear", measured, text, tol, text_at, [p1, p2], file, line, leader=leader)
 
-    def diameter(self, center, radius, angle=45, text=None, tol=None, text_at=None):
+    def diameter(self, center, radius, angle=45, text=None, tol=None, text_at=None, leader=False):
         """Diameter dimension of a circle seen as a circle in this view (center in the model, radius in mm).
         angle: direction on the sheet in degrees from the center towards the text (0 right, 90 up). Ø is added
         automatically: text="<> H7" gives "Ø8 H7", a Ø typed before <> is not doubled."""
@@ -917,9 +920,9 @@ class View:
         # ezdxf legt den Text ans Ende gegenueber von angle
         dim = self.sheet.msp.add_diameter_dim(center=self.pt(center), radius=r * self.scale, angle=float(angle) + 180,
                                               **self._dimargs(text))
-        return self._finish(dim, "diameter", 2 * r, text, tol, text_at, [center], file, line, radius=r)
+        return self._finish(dim, "diameter", 2 * r, text, tol, text_at, [center], file, line, radius=r, leader=leader)
 
-    def radius(self, center, radius, angle=45, text=None, tol=None, text_at=None):
+    def radius(self, center, radius, angle=45, text=None, tol=None, text_at=None, leader=False):
         """Radius dimension of an arc seen as an arc in this view. angle: direction on the sheet in degrees from the
         center towards the text. R is added automatically: text="<>" gives "R4", a typed R before <> is not doubled."""
         file, line = _where()
@@ -927,7 +930,7 @@ class View:
         text = _no_prefix(text, r"R")
         dim = self.sheet.msp.add_radius_dim(center=self.pt(center), radius=r * self.scale, angle=float(angle),
                                             **self._dimargs(text))
-        return self._finish(dim, "radius", r, text, tol, text_at, [center], file, line, radius=r)
+        return self._finish(dim, "radius", r, text, tol, text_at, [center], file, line, radius=r, leader=leader)
 
     def angle(self, vertex, p1, p2, distance=15, text=None, text_at=None):
         """Angle between the lines vertex -> p1 and vertex -> p2 (model points), the arc at distance mm on the sheet
@@ -955,7 +958,7 @@ class View:
             text = text.replace("<>", num(measured))
         return dict(text=text, dimstyle="ISO", override={"dimlfac": 1.0 / self.scale}, dxfattribs={"layer": "DIM"})
 
-    def _finish(self, dim, kind, measured, text, tol, text_at, points, file, line, radius=None):
+    def _finish(self, dim, kind, measured, text, tol, text_at, points, file, line, radius=None, leader=False):
         if tol is not None:
             if isinstance(tol, (int, float)):
                 dim.set_tolerance(abs(float(tol)))
@@ -966,7 +969,9 @@ class View:
                     raise ValueError(f"tol must be 0.1 (for ±0.1) or (upper, lower) like (0.1, -0.05), not {tol!r}") from None
                 dim.set_tolerance(up, -lo)
         if text_at is not None:
-            dim.set_location(tuple(_pt2(text_at, "text_at")), leader=False)
+            # Ohne Leader wandert nur der Text (DIMTMOVE=2): steht er weit weg, haengt er in der Luft. Mit Leader
+            # (DIMTMOVE=1) zeichnet ezdxf die Linie vom Text zum Mass.
+            dim.set_location(tuple(_pt2(text_at, "text_at")), leader=bool(leader))
         dim.render()
         rec = dict(kind=kind, value=measured, text=text, view=self, points=[tuple(_vec(p, "point")) for p in points],
                    radius=radius, entity=dim.dimension, file=file, line=line)

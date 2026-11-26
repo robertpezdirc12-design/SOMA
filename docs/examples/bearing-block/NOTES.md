@@ -34,9 +34,30 @@ merges two bodies is the mistake you only notice in the other program. And it ch
 built for it: a screw through a washer and a nut, where **nothing** may overlap — SOMA draws no threads, so the nut's
 bore is nominal and the screw passes through it. If that ever changed, every bolted assembly would light up.
 
+## The sheet
+
+`drawings/assembly.py` is an A3 sheet at 1:1: a full section A-A along the shaft axis, a plan below it, six
+dimensions, five item numbers and the parts list. `soma drawing build assembly` writes `output/drawings/Bearing_block.pdf`
+and `.dxf`, and `npm run test:assembly` requires the sheet to build **without a warning** and reads the parts list out of
+the DXF to compare it with `soma bom` row for row. A parts list that goes stale now fails a test instead of shipping.
+
+Where the dimensions go was decided by the geometry, not by taste, and the section is the reason:
+
+| Dimension | Why there |
+|---|---|
+| 90 below the part | The shaft leaves the housing at z = -15, so a line closer than that crosses it. |
+| 34 on the left | On the right the item numbers fan out; on the left the housing ends and nothing else is there. |
+| 15 between the shaft lines | It measures from the housing face (z = 0) to the shaft end (z = -15), and both points lie on the shaft's silhouette. |
+| 50 on the left of the plan | Same reason, and it lines up with the 34 above it. |
+| Ø30 in the plan | The bore is a circle there. In the section it is two parallel lines and `diameter()` would find no circle. |
+| Ø10 with a leader | 10 mm of shaft are 13 mm of text: it cannot stand between the arrows, so it stands outside with a leader. |
+
+The plan shows the bearing's rings and balls because the top bearing's face is flush with the housing's top face
+(`MID = HOUSING_D - SEAT`), so they are not hidden — they are what you see when you look down the bore.
+
 ## What this example found
 
-Three gaps, all closed:
+Four gaps, all closed:
 
 - `soma inspect` measured each part and nothing between parts, so an assembly could be wrong and still report
   `ok: true`. It now has `--overlaps`, and the MCP tool `soma_inspect` takes `overlaps: true`.
@@ -46,6 +67,10 @@ Three gaps, all closed:
 - A circlip in its free state is smaller than its groove, so it always overlaps its shaft. That is how the part is
   made, but it made every interference measurement on a shaft report a collision. `RetainingRing(..., mounted=True)`
   is the ring as it sits.
+- `view.dim(..., text_at=...)` moved the dimension text and left the dimension line where it was, so the text stood
+  beside the dimension with nothing in between — the fix the checker itself suggests ("move the text with
+  `text_at=`") produced a broken-looking sheet for any text longer than the distance it measures. There is
+  `leader=True` now (`DIMTMOVE=1`), and `app/resources/skills/drawings.md` says when it is needed.
 
 Still open, and deliberately: the ring's lugs are a rectangle, not the teardrop a maker draws. DIN leaves the shape
 open, so a drawing of this ring will differ from the model in the lugs and nowhere else.

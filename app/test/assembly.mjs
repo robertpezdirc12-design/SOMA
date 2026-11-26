@@ -51,7 +51,10 @@ add_part("Nut", nut)
 /** Kopie des Beispiels in einen temporären Ordner, optional mit einer Änderung am Quelltext. */
 function copy(dir, name, edit) {
   const project = path.join(dir, name);
-  fs.cpSync(EXAMPLE, project, { recursive: true });
+  // .soma, output, exports und __pycache__ sind Ergebnisse eines früheren Laufs: sie mitzunehmen machte den Test von
+  // dem abhängig, was zufällig im Beispielordner liegt.
+  const skip = new Set(['.soma', 'output', 'exports', '__pycache__']);
+  fs.cpSync(EXAMPLE, project, { recursive: true, filter: (src) => !skip.has(path.basename(src)) });
   if (edit) {
     const file = path.join(project, 'model.py');
     const before = fs.readFileSync(file, 'utf8');
@@ -60,6 +63,50 @@ function copy(dir, name, edit) {
     fs.writeFileSync(file, after);
   }
   return project;
+}
+
+// Was auf dem Blatt steht, gelesen aus der DXF: die Zellen der Stückliste (die Zeile mit "Pos" ist die Kopfzeile,
+// alles darunter gehört zur Tabelle) und das Maß "Ø10", dessen Text neben dem Maß steht. So prüft der Test, was auf
+// dem Blatt steht, und nicht, was im Quelltext steht.
+const SHEET = `
+import json, sys, ezdxf
+msp = ezdxf.readfile(sys.argv[1]).modelspace()
+cells = [e for e in msp if e.dxftype() == "TEXT"]
+head = next(e for e in cells if e.dxf.text.strip() == "Pos")
+y0, x0 = head.dxf.insert.y, head.dxf.insert.x
+rows = {}
+for e in cells:
+    if e.dxf.insert.x >= x0 - 1 and -41 < e.dxf.insert.y - y0 < 1:
+        rows.setdefault(round(e.dxf.insert.y, 2), []).append((e.dxf.insert.x, e.dxf.text))
+dim = next(d for d in msp.query("DIMENSION") if d.dxf.text == "Ø10")
+lines = [e for e in dim.virtual_entities() if e.dxftype() == "LINE"]
+print(json.dumps(dict(
+    rows=[[t for _x, t in sorted(v)] for _y, v in sorted(rows.items(), reverse=True)],
+    leader=dict(lines=len(lines), reach=round(max(max(e.dxf.start.x, e.dxf.end.x) for e in lines), 2))),
+    ensure_ascii=False))
+`;
+
+/** Was auf dem Blatt steht, gegen das, was `soma bom` sagt: Liste der Abweichungen, leer heißt einig.
+ *  Spalten: Pos, Name, Qty, Bezeichnung. Gefertigte Teile stehen mit ihrem Namen, gekaufte mit ihrer Bezeichnung. */
+function listDiff(rows, bom) {
+  const body = rows.slice(1);            // ohne Kopfzeile
+  const cell = (row, i) => (row[i] ?? '').trim();
+  const off = [];
+  if (!rows.length) return ['keine Tabelle gefunden'];
+  if (body.length !== (bom?.totals?.items ?? -1)) off.push(`${body.length} Zeilen statt ${bom.totals.items}`);
+  const pos = body.map((r) => cell(r, 0)).join(',');
+  if (pos !== body.map((_r, i) => String(i + 1)).join(',')) off.push(`Positionen ${pos}`);
+  for (const m of bom?.manufactured ?? []) {
+    const r = body.find((row) => cell(row, 1) === m.name);
+    if (!r) off.push(`${m.name} fehlt`);
+    else if (Number(cell(r, 2)) !== m.count) off.push(`${m.name} ${cell(r, 2)}x statt ${m.count}x`);
+  }
+  for (const p of bom?.purchased ?? []) {
+    const r = body.find((row) => cell(row, 3) === p.designation);
+    if (!r) off.push(`${p.designation} fehlt`);
+    else if (Number(cell(r, 2)) !== p.count) off.push(`${p.designation} ${cell(r, 2)}x statt ${p.count}x`);
+  }
+  return off;
 }
 
 const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'soma-assembly-'));
@@ -141,6 +188,46 @@ try {
   check('Die Stückliste zählt zwei Lager, zwei Ringe und eine Passfeder',
     count('6200') === 2 && count('DIN 471') === 2 && count('DIN 6885') === 1 && (bom?.manufactured ?? []).length === 2,
     bought.map((l) => `${l.count} x ${l.designation}`).join(', ') + ` / ${(bom?.manufactured ?? []).length} gefertigt`);
+
+  // Die Zeichnung: sie muss ohne Warnung bauen, und ihre Stückliste muss sagen, was `soma bom` sagt. Der Test liest die
+  // Zellen aus der DXF und vergleicht sie mit der Stückliste — eine Tabelle, die veraltet, fällt damit auf.
+  const draw = json(['drawing', 'build', 'assembly', '--json', '--project', project]);
+  const sheet = draw?.built?.[0];
+  check('Die Zeichnung baut ohne Warnung',
+    Boolean(sheet) && (draw.errors ?? []).length === 0 && sheet.warnings.length === 0,
+    sheet ? ((sheet.warnings ?? []).map((w) => w.message ?? JSON.stringify(w)).join('; ') || 'keine Warnung')
+      : JSON.stringify(draw?.errors ?? 'kein JSON'));
+  check('Zwei Ansichten, sechs Maße und ein Blatt im Satz',
+    sheet && sheet.views.length === 2 && sheet.dims.length === 6 && (draw.set?.sheets ?? 0) === 1,
+    sheet ? `${sheet.views.length} Ansichten, ${sheet.dims.length} Maße` : 'kein Blatt');
+
+  const dump = spawnSync(PY, ['-c', SHEET, path.join(project, sheet?.dxf ?? '')],
+    { encoding: 'utf8', env: { ...process.env, PYTHONIOENCODING: 'utf-8' } });
+  let page = null;
+  try {
+    page = JSON.parse(dump.stdout || 'null');
+  } catch {
+    page = null;
+  }
+  const rows = page?.rows ?? [];
+  const off = listDiff(rows, bom);
+  check('Die Stückliste auf dem Blatt stimmt mit soma bom überein', off.length === 0,
+    off.join(', ') || rows.slice(1).map((r) => r.join(' ')).join(' | '));
+
+  // Gegenprobe, ohne noch einmal zu bauen: eine Bezeichnung, die nicht mehr zur Stückliste passt, muss auffallen —
+  // sonst wäre die Zeile darüber eine Prüfung, die immer besteht.
+  const stale = JSON.parse(JSON.stringify(bom));
+  stale.purchased.find((p) => p.designation.startsWith('DIN 6885')).designation = 'DIN 6885 3x3x25';
+  const caught = listDiff(rows, stale);
+  check('Eine veraltete Bezeichnung auf dem Blatt fällt auf',
+    caught.some((m) => m.includes('DIN 6885 3x3x25')), caught.join(', ') || 'nichts bemerkt');
+
+  // Der Wellendurchmesser ist 10 mm breit und sein Text 13: er passt nicht zwischen die Pfeile, also steht er
+  // daneben — und muss mit einer Hinweislinie an das Maß angebunden sein. Ein Maß hat drei Linien (Maßlinie und zwei
+  // Verlängerungen), mit Leader sind es fünf, und die letzte reicht bis unter den Text.
+  check('Der Text "Ø10" steht neben dem Maß und hängt an einer Hinweislinie',
+    page?.leader?.lines === 5 && page.leader.reach > 145,
+    JSON.stringify(page?.leader ?? null));
 
   // Dieselbe Messung an der exportierten Datei: from_file(overlaps=True) ist ein eigener Weg und muss dasselbe sagen.
   // Ein Export, in dem zwei Körper ineinandersitzen, ist genau der Fehler, den man erst im anderen Programm merkt.
