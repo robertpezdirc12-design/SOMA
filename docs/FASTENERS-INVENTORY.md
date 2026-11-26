@@ -54,19 +54,18 @@ hole it needs come from the same table row, so they cannot drift apart.
 | Flange nut, domed cap nut | DIN 1665, DIN 1587 |
 | Hex nut, unchamfered | ISO 4036 |
 | Chamfered washer, internal-tooth lock washer, small washer | ISO 7090, DIN 6797, ISO 7092 |
-| Deep-groove ball bearing | 56 catalogue numbers, open and capped, bore 3–10 mm |
+| Rolling bearings | 100 catalogue numbers in five families: deep groove (open and capped), angular contact, cylindrical roller, tapered roller — bore 3–15 mm |
 | Retaining ring | DIN 471 (shaft), DIN 472 (bore) |
 | Parallel key | DIN 6885 form A |
 | O-ring | ISO 3601, 349 sizes, eight cords, with the groove for shaft, bore and face seals |
 
 ### 1.3 Data tables
 
-35 of the 48 files in `bd_warehouse/src/bd_warehouse/data/` are present, and every one of them is read by the
+38 of the 48 files in `bd_warehouse/src/bd_warehouse/data/` are present, and every one of them is read by the
 module. The copy is lean, not accidental: what is missing falls into two groups.
 
 | Missing | Why |
 |---|---|
-| three bearing tables (angular contact, cylindrical roller, tapered roller) | No code reads them — see G1a |
 | `raised_countersunk_oval_head_parameters.csv`, `imperial_set_screw_parameters.csv`, `metric_set_screw_parameters.csv`, `brad_tee_nut_parameters.csv` | No part needs them yet; the T-nut table is unusable (see G8) |
 | `iso10664def.csv`, `iso_228_1.csv`, four plastic-bottle thread tables | Thread profiles and bottle threads — nothing in SOMA models a thread |
 
@@ -87,15 +86,27 @@ Ordered by how often a mechanical design actually needs the part, not by how eas
 
 **G1. Bearings: nothing at all.** ✅ **Done** — `Bearing` in `soma.fasteners` (see §5). A 608-2RS or a 6001 is the
 second most common purchased part after screws, and it had to be modelled by hand or imported as STEP. Now:
-`Bearing("608", at=(0, 0, 6))`, 56 catalogue numbers, one body each, bore and outside diameter exact, catalogue mass.
-What it does not do: bores above 10 mm (the tables stop at the 6000/6200/6300 sizes), angular-contact and roller
-bearings (tables not copied — see G1a), and chamfers.
+`Bearing("608", at=(0, 0, 6))`, 100 catalogue numbers in five families, one body each, bore and outside diameter
+exact, catalogue mass. What it does not do: bores above 15 mm (the tables stop at the 6000/6200/6300 sizes), and
+chamfers.
 
-**G1a. Roller and angular-contact bearings.** `single_row_cylindrical_roller_bearing_parameters.csv`,
-`single_row_tapered_roller_bearing_parameters.csv` and `single_row_angular_contact_ball_bearing_parameters.csv` exist
-upstream and were deliberately **not** copied: no code reads them, and a CSV in `data/` that nothing reads is the exact
-failure this inventory warns about in §4. Adding them means rollers (cylinders and cones) instead of balls and, for the
-tapered ones, a cone angle from `SKT:a`. Do it when a model needs one, not before.
+**G1a. Roller and angular-contact bearings.** ✅ **Done.** `single_row_angular_contact_ball_bearing_parameters.csv`,
+`single_row_cylindrical_roller_bearing_parameters.csv` and `single_row_tapered_roller_bearing_parameters.csv` were
+copied and are read: `Bearing("7200 BECBP")`, `Bearing("NJ 202 ECP")`, `Bearing("30302 J2")`. `kind` says what rolls
+(`"ball"` or `"roller"`) and `family_key` which table the number came from.
+
+Two things the tables decided, not taste:
+
+- **The tapered width is `T`, not `B`.** Those rows carry both; `B` is the inner ring only, so a bearing built on `B`
+  would be 1.25 mm too thin at 30302 and would not fit its housing. `BEARINGS["tapered"]` therefore declares
+  `width_col="T"`, and the same entry declares `mass_col="kg"` because that table weighs in kilograms where the others
+  weigh in `mass`.
+- **A cone angle cannot be drawn, so it is not guessed.** The tapered table gives `a`, the distance from the bearing
+  face to the cone apex — not an angle. The rollers are therefore cylinders, exactly as in the cylindrical family, and
+  the docstring says so. What is exact is the envelope, which is what decides whether the part fits.
+
+The angular-contact table has one placeholder row whose designation is an en-dash, and the roller table one that is
+empty. Both are skipped by `_NOT_A_NAME`, the same rule the index uses.
 
 **G2. No bill of materials.** ✅ **Done** — `soma bom` (see `docs/BOM.md`). `HeatSetInsert` stores `part_number`
 (`fasteners.py:835`), and `registry.py` marks standard parts with `role="hardware"`; nothing read either, and
@@ -237,8 +248,9 @@ This is worth stating once in the `standard-parts` skill so agents stop "improvi
 | "Do not duplicate functionality" | Confirmed: importing `cq_warehouse` would duplicate all four classes. |
 | Runtime change | **None needed.** New families are new modules in `python/soma/`, reading new CSVs from the same `data/fasteners/` folder under the same Apache-2.0 notice. No new pip dependency. |
 
-Status: G1, G2, G3, G4, G5, G6, G7, G8, G9, G10 and G11 are implemented. G1a and G12 to G14 are open — the rest of
-the list is done.
+Status: G1, G1a, G2, G3, G4, G5, G6, G7, G8, G9, G10 and G11 are implemented. G12 to G14 are open — the rest of the
+list is done. G12 to G14 are the three that need a concrete model before they are worth the tables, which is why they
+are still open on purpose.
 
 ### Recommended order
 
@@ -256,7 +268,10 @@ the list is done.
 8. ~~**Check the rows, not the standards**~~ — **done** (`npm run test:tables`). Not on the list when this document was
    written, and it should have been: counting standards said "covered" while single rows were broken. It found three
    heat-set insert bugs on its first run.
-9. **G12–G14** — only against a concrete model that needs them.
+9. ~~**G1a (roller and angular-contact bearings)**~~ — **done**. It was held back because "no code reads them"; once
+   `Bearing` existed, the code did, and the tables were worth copying. The two things that mattered were `T` versus `B`
+   for the tapered width and the fact that `a` is not an angle — both in §G1a.
+10. **G12–G14** — only against a concrete model that needs them.
 
 ### Licensing note
 
@@ -328,8 +343,10 @@ class in `fasteners.py` reuses `_Part`, `_table`, `_cyl` and `_ring_local` uncha
 The cost is a naming wart: `from soma.fasteners import Bearing`. It is recorded here rather than hidden, and renaming
 `soma.fasteners` is not an option — it is public API in every model already written.
 
-**Two tables, not four.** Angular-contact and roller bearings were dropped from the copy (G1a) because nothing reads
-them yet. The two that stayed are the ones `Bearing` reads, which is the rule §4 states.
+**Five tables, one class.** The three tables G1a left out were added once there was code to read them (G1a, done).
+`BEARINGS` declares per family what differs — `kind` (`"ball"` or `"roller"`), `width_col` (`T` for the tapered
+family) and `mass_col` (`kg` there, `mass` elsewhere) — so the class stays one branch of geometry and three columns
+of table metadata, not five near-copies of the same code.
 
 **What is exact and what is derived.** The data forced this split: `d1`/`D1` mean different things in the two tables,
 so the ball diameter cannot be derived from them (details in `QUELLE.md` next to the tables).

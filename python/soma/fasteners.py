@@ -135,13 +135,26 @@ WASHERS = {
 INSERT_BRANDS = {"ruthex": "ruthex", "cnckitchen": "CNCKitchen", "mcmaster": "McMaster-Carr", "mcmastercarr": "McMaster-Carr",
                  "hilitchi": "Hilitchi", "aesamzhihui": "AE-SamZhihui"}
 BEARINGS = {
-    "deepgroove": dict(name="Deep groove ball bearing", title="Deep groove ball bearing, open",
+    # kind sagt, was rollt: "ball" oder "roller". width_col und mass_col heissen in den Tabellen nicht ueberall gleich.
+    "deepgroove": dict(name="Deep groove ball bearing", title="Deep groove ball bearing, open", kind="ball",
                        table="single_row_deep_groove_ball_bearing_parameters.csv"),
     "capped": dict(name="Capped deep groove ball bearing", title="Deep groove ball bearing, capped or sealed",
-                   table="single_row_capped_deep_groove_ball_bearing_parameters.csv"),
+                   kind="ball", capped=True, table="single_row_capped_deep_groove_ball_bearing_parameters.csv"),
+    "angular": dict(name="Angular contact ball bearing", title="Angular contact ball bearing, single row",
+                    kind="ball", table="single_row_angular_contact_ball_bearing_parameters.csv"),
+    "cylindrical": dict(name="Cylindrical roller bearing", title="Cylindrical roller bearing, single row",
+                        kind="roller", table="single_row_cylindrical_roller_bearing_parameters.csv"),
+    # Bei den Kegelrollenlagern ist T die Breite ueber alles, B nur die Innenringbreite — die Huelle ist T.
+    "tapered": dict(name="Tapered roller bearing", title="Tapered roller bearing, single row", kind="roller",
+                    width_col="T", mass_col="kg",
+                    table="single_row_tapered_roller_bearing_parameters.csv"),
 }
 BEARING_FAMILIES = {"open": "deepgroove", "deepgrooveballbearing": "deepgroove", "2z": "capped", "2rz": "capped",
-                    "2rs": "capped", "2rs1": "capped", "sealed": "capped", "shielded": "capped", "capped": "capped"}
+                    "2rs": "capped", "2rs1": "capped", "sealed": "capped", "shielded": "capped", "capped": "capped",
+                    "angular": "angular", "angularcontact": "angular", "angularcontactballbearing": "angular",
+                    "cylindrical": "cylindrical", "cylindricalroller": "cylindrical",
+                    "cylindricalrollerbearing": "cylindrical", "tapered": "tapered", "taperedroller": "tapered",
+                    "taperedrollerbearing": "tapered"}
 ALIASES = {"iso73801": "iso7380"}
 # Alte DIN-Bezeichnungen: melden statt still umdeuten, weil manche Masse abweichen
 HINTS = {
@@ -1516,6 +1529,8 @@ class ORing(_Part):
 # --- Waelzlager --------------------------------------------------------------------------------------------------------
 
 _BEARING_MARK = re.compile(r"^[*\s]+")
+# Kein Name, sondern ein Platzhalter der Tabelle: ein Strich in der Bezeichnungsspalte
+_NOT_A_NAME = ("", "-", "\u2013", "\u2014")
 
 
 @functools.cache
@@ -1525,7 +1540,7 @@ def _bearing_index():
     for key, spec in BEARINGS.items():
         for _, row in _table(spec["table"]):
             name = _BEARING_MARK.sub("", row.get("SKT:Designation", "")).strip()
-            if not name or name in ("-", "\u2013", "\u2014"):
+            if name in _NOT_A_NAME:
                 continue
             out.setdefault(name, []).append((key, row))
     return out
@@ -1549,27 +1564,45 @@ def _bearing_family(family):
 
 
 @functools.cache
-def _bearing_local(d, D, B, capped):
+def _bearing_local(d, D, B, kind="ball", capped=False):
     """Lager um die Achse, von z = 0 bis z = B.
 
-    Ringe und Kugeln nach einer Regel, nicht nach Katalog: die Tabelle fuehrt d1 und D1 (Schulterdurchmesser), aber
-    die beiden Tabellen meinen damit Verschiedenes — bei den gedeckelten Lagern ist D1 - d1 groesser als die Breite,
-    ein Lager ginge also nicht auf. Deshalb: Wandstaerke aus dem radialen Platz, Kugeln mit 0,55 x Breite, Anzahl aus
-    dem Teilkreis. Die Kugeln ueberlappen beide Ringe um 2 % und machen das Lager damit zu einem Koerper.
+    Ringe und Waelzkoerper nach einer Regel, nicht nach Katalog: die Tabelle fuehrt d1 und D1 (Schulterdurchmesser), aber
+    die Tabellen meinen damit Verschiedenes — bei den gedeckelten Lagern ist D1 - d1 groesser als die Breite, ein Lager
+    ginge also nicht auf. Deshalb: Wandstaerke aus dem radialen Platz, Waelzkoerper mit 0,55 x Breite, Anzahl aus dem
+    Teilkreis. Sie ueberlappen beide Ringe um 2 % und machen das Lager damit zu einem Koerper.
+
+    kind  "ball" (Kugeln) oder "roller" (Walzen, Zylinder parallel zur Achse). Kegelrollenlager bekommen dieselben
+          Walzen: den Kegelwinkel gibt die Tabelle nicht her (nur `a`, den Abstand der Kegelspitze), und ein geratener
+          Winkel waere schlechter als eine ehrliche Huelle. Gezeichnet ist immer die Huelle, nie das Innere.
     """
     space = (D - d) / 2
-    ball = min(0.55 * B, 0.8 * space)
-    wall = max((space - ball) / 2, 0.15 * space)
+    if kind == "roller":
+        # Walze statt Kugel: laenger als dick, das ist der Unterschied, den man im Schnitt sieht
+        roller = min(0.45 * space, 0.5 * B)
+        length = min(0.6 * B, 1.6 * roller)
+        wall = max((space - roller) / 2, 0.15 * space)
+        pitch = (d + D) / 2
+        count = max(6, min(14, int(math.pi * pitch / (1.5 * roller))))
+        r = 0.52 * roller
+        rolls = cq.Compound.makeCompound([
+            cq.Solid.makeCylinder(r, length, cq.Vector(pitch / 2 * math.cos(2 * math.pi * i / count),
+                                                       pitch / 2 * math.sin(2 * math.pi * i / count),
+                                                       (B - length) / 2), cq.Vector(0, 0, 1))
+            for i in range(count)])
+    else:
+        ball = min(0.55 * B, 0.8 * space)
+        wall = max((space - ball) / 2, 0.15 * space)
+        pitch = (d + D) / 2
+        count = max(6, min(14, int(math.pi * pitch / (1.3 * ball))))
+        r = 0.52 * ball
+        rolls = cq.Compound.makeCompound([
+            cq.Solid.makeSphere(r, cq.Vector(pitch / 2 * math.cos(2 * math.pi * i / count),
+                                             pitch / 2 * math.sin(2 * math.pi * i / count), B / 2))
+            for i in range(count)])
     inner = _one(_cyl(d + 2 * wall, 0, B).cut(_cyl(d, -0.01, B + 0.01)))
     outer = _one(_cyl(D, 0, B).cut(_cyl(D - 2 * wall, -0.01, B + 0.01)))
-    pitch = (d + D) / 2
-    count = max(6, min(14, int(math.pi * pitch / (1.3 * ball))))
-    r = 0.52 * ball
-    balls = cq.Compound.makeCompound([
-        cq.Solid.makeSphere(r, cq.Vector(pitch / 2 * math.cos(2 * math.pi * i / count),
-                                         pitch / 2 * math.sin(2 * math.pi * i / count), B / 2))
-        for i in range(count)])
-    parts = [inner, outer, balls]
+    parts = [inner, outer, rolls]
     if capped:
         t = min(0.3, 0.1 * B)
         for z in (0.0, B - t):
@@ -1583,12 +1616,20 @@ class Bearing(_Part):
     material by its width, like a washer.
 
     designation  catalogue number: "608", "6000", "6200", "6300", "623", "624" (open), "608-2Z", "623-2Z", "6300-2RS1"
-                 (capped or sealed). The tables cover bores from 3 to 10 mm, which is the range small mechanisms use
-    family       only needed when a number sits in both tables: "deep groove" (open) or "capped"
+                 (capped or sealed), "7200 BECBP" (angular contact), "NJ 202 ECP" (cylindrical roller),
+                 "30302 J2" (tapered roller). The tables cover bores from 3 to 15 mm, which is the range small
+                 mechanisms use
+    family       only needed when a number sits in more than one table: "deep groove", "capped", "angular",
+                 "cylindrical" or "tapered"
 
     Bore, outside diameter, width, chamfer and mass are the catalogue values; `mass_kg` is what the part really weighs.
-    The rings and balls in between follow a rule, not a catalogue drawing — see `_bearing_local`. Chamfers are not
-    modelled, `chamfer` is the table value for the corner of a housing.
+    `kind` says what rolls ("ball" or "roller"), `family_key` which table the number came from. For a tapered roller
+    bearing `width` is `T`, the width over all — the table also has `B`, but that is only the inner ring.
+
+    The rings and the rolling elements between them follow a rule, not a catalogue drawing — see `_bearing_local`.
+    What is exact is the envelope, which is what decides whether the bearing fits a housing and a shaft. Chamfers are
+    not modelled, `chamfer` is the table value for the corner of a housing. The contact angle of an angular contact
+    bearing and the cone of a tapered roller are not drawn, because the tables give no angle to draw them from.
     """
 
     def __init__(self, designation, *, family=None, at=None, direction=None, on=None, sunk=False, angle=0.0):
@@ -1603,18 +1644,25 @@ class Bearing(_Part):
             known = sorted(_bearing_index())
             close = difflib.get_close_matches(name, known, n=3, cutoff=0.6)
             hint = (" Did you mean " + " or ".join(repr(c) for c in close) + "?") if close else ""
-            raise ValueError(f"Bearing: there is no bearing {name!r} here.{hint} Available: " + ", ".join(known))
+            raise ValueError(f"Bearing: there is no bearing {name!r} here.{hint} {len(known)} catalogue numbers are "
+                             "known; families: " + ", ".join(f"{v['name']} ({v['title']})" for v in BEARINGS.values())
+                             + ". Give the number exactly as the catalogue writes it")
         if len(hits) > 1:
-            raise ValueError(f"Bearing: {name!r} is in both tables; give family=\"deep groove\" or family=\"capped\"")
+            raise ValueError(f"Bearing: {name!r} is in more than one table ("
+                             + ", ".join(BEARINGS[k]["name"] for k, _ in hits) + "); give family=")
         key, row = hits[0]
-        self.standard = BEARINGS[key]["name"]
+        spec = BEARINGS[key]
+        self.family_key = key
+        self.standard = spec["name"]
         self.designation = name
-        self.capped = key == "capped"
-        self.bore, self.diameter, self.width = _bnum(row, "d"), _bnum(row, "D"), _bnum(row, "B")
+        self.kind = spec["kind"]
+        self.capped = bool(spec.get("capped"))
+        self.bore, self.diameter = _bnum(row, "d"), _bnum(row, "D")
+        self.width = _bnum(row, spec.get("width_col", "B"))
         if None in (self.bore, self.diameter, self.width):
             raise ValueError(f"Bearing: the table has no usable bore, outside diameter or width for {name!r}")
         self.chamfer = _bnum(row, "r12")
-        self.mass_kg = _bnum(row, "mass")
+        self.mass_kg = _bnum(row, spec.get("mass_col", "mass"))
         sink = _sink(sunk, "Bearing")
         self.sunk = sink is not None
         self._place(at, direction, on, angle, self.width + sink if sink is not None else 0.0)
@@ -1629,4 +1677,4 @@ class Bearing(_Part):
         return self._local_point(self.width)
 
     def _local(self):
-        return _bearing_local(self.bore, self.diameter, self.width, self.capped)
+        return _bearing_local(self.bore, self.diameter, self.width, self.kind, self.capped)

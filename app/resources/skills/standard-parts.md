@@ -1,12 +1,12 @@
 ---
 title: Standard parts
 name: Standard parts
-summary: Screws, nuts, washers, threaded inserts, ball bearings, retaining rings, shaft keys and O-rings from soma.fasteners with matching holes, nut traps, grooves, keyways, gland grooves, seats, dowel pins and aluminium extrusions.
+summary: Screws, nuts, washers, threaded inserts, rolling bearings, retaining rings, shaft keys and O-rings from soma.fasteners with matching holes, nut traps, grooves, keyways, gland grooves, seats, dowel pins and aluminium extrusions.
 order: 22
 category: Design knowledge
 default: always
 when: the model needs screws, nuts, washers, threaded inserts, bearings, retaining rings, shaft keys, O-rings, dowel pins or profiles
-topics: Screws, nuts, washers and inserts with soma.fasteners; Position and holes; Nut traps; Ball bearings; Retaining rings and shaft keys; O-rings and their grooves; Shoulder screws; Pins and profiles; Standard parts in the model
+topics: Screws, nuts, washers and inserts with soma.fasteners; Position and holes; Nut traps; Bearings; Retaining rings and shaft keys; O-rings and their grooves; Shoulder screws; Pins and profiles; Standard parts in the model
 ---
 # Skill: Standard parts
 
@@ -86,11 +86,16 @@ b = Bearing("608", at=(0, 0, SEAT_Z))       # one face rests at `at`, width B go
 add_part("Bearing 1", b, group="Hardware")   # role "hardware" automatically
 ```
 
-- Covers bores from 3 to 10 mm: 604, 607, 608, 609, 623–629, 618/4–618/9, 619/4–619/9, 61800, 61900, 6000, 6200,
-  6300, and the capped variants `623-2Z`, `E2.608-2Z`, `630/8-2RS1`, `638-2RZ` and so on. `Bearing(...)` with a
-  number that is not there says which ones are.
-- **Not** in the library: 6001, 6002, 6201, 688, anything above 10 mm bore, and all roller and angular-contact
-  bearings. For those: ask for a STEP file, or model the envelope (two rings, or one ring) and say that it is one.
+- Covers bores from 3 to 15 mm in five families, 100 catalogue numbers: deep groove (604, 607, 608, 609, 623–629,
+  618/4–618/9, 619/4–619/9, 61800, 61900, 6000, 6200, 6300), capped or sealed (`623-2Z`, `E2.608-2Z`,
+  `630/8-2RS1`, `638-2RZ`), angular contact (`7200 BECBP`), cylindrical roller (`NJ 202 ECP`) and tapered roller
+  (`30302 J2`). A number that is not there gets a message naming the five families.
+- `b.kind` is `"ball"` or `"roller"` and `b.family_key` says which table it came from — worth printing in a parts list
+  note, because a 608 and an NJ 202 are not interchangeable.
+- **Not** in the library: 6001, 6002, 6201, 688, anything above 15 mm bore. For those: ask for a STEP file, or model
+  the envelope (two rings, or one ring) and say that it is one.
+- A tapered roller bearing's `b.width` is `T`, the width over all. The table also has `B`, but that is only the inner
+  ring — using it would make the bearing too thin for its housing. The library already picks `T`; do not "correct" it.
 - `b.bore`, `b.diameter`, `b.width` are the catalogue values; `b.mass_g` is the real mass. The rings and balls in
   between are drawn to a rule, so the volume from `soma inspect` is smaller than the real part — for a parts list use
   `b.mass_g`, not volume × density.
@@ -194,12 +199,13 @@ head), 7045 (pan head, cross recess), 7380-2 (button with collar), DIN 967 (pan 
 flange) and the OpenBuilds low profile series; nuts ISO 4032, 4033, 4035, 4036 (thin, no chamfer), DIN 557, DIN 1665
 (flange), DIN 1587 (domed cap); washers ISO 7089, 7091, 7093, 7090 (chamfered), 7092 (small), DIN 6797 (internal
 teeth); heat-set inserts from five makers;
-deep-groove ball bearings from 3 to 10 mm bore, open and capped; retaining rings DIN 471 and DIN 472 for shafts and
+rolling bearings from 3 to 15 mm bore in five families (deep groove open and capped, angular contact, cylindrical
+roller, tapered roller); retaining rings DIN 471 and DIN 472 for shafts and
 bores from 3 to 300 mm; parallel keys DIN 6885 for shafts from 6 to 50 mm; O-rings ISO 3601 in 349 sizes with the
 groove for shaft, bore and face seals; and the clearance holes, tap drills, counterbores, nut traps, insert holes,
 grooves, keyways and gland grooves that go with them. Nothing else.
 
-Not covered, model by hand (with `role="hardware"`): roller and angular-contact bearings, dowel pins, gears,
+Not covered, model by hand (with `role="hardware"`): bearings with a bore above 15 mm, dowel pins, gears,
 sprockets, pulleys, springs, T-nuts, lip seals and shaft seals, imperial fasteners. Ask before inventing dimensions; the
 sizes in this skill are a starting point, not a catalogue.
 

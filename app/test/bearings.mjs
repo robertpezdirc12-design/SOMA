@@ -20,7 +20,7 @@ const py = (args, opts = {}) => spawnSync(PY, ['-m', 'soma', ...args], {
 const LIB_CHECKS = String.raw`
 import json
 import cadquery as cq
-from soma.fasteners import Bearing, standards, _bearing_index
+from soma.fasteners import Bearing, standards, _bearing_index, _bearing_local
 
 def out(label, ok, detail=""):
     print(json.dumps([label, bool(ok), str(detail)[:110]]), flush=True)
@@ -39,7 +39,7 @@ def raises(fn):
         return True
     return False
 
-# 1) Jede Bezeichnung der beiden Tabellen findet ihre Zeile und liefert die Maße der Tabelle
+# 1) Jede Bezeichnung aller fünf Tabellen findet ihre Zeile und liefert die Maße der Tabelle
 idx = _bearing_index()
 bad = []
 for name, hits in idx.items():
@@ -48,7 +48,8 @@ for name, hits in idx.items():
         continue
     row = hits[0][1]
     b = Bearing(name, at=(0, 0, 0))
-    want = (float(row["SKT:d"]), float(row["SKT:D"]), float(row["SKT:B"]))
+    # Bei den Kegelrollenlagern ist T die Breite über alles, B nur die Innenringbreite
+    want = (float(row["SKT:d"]), float(row["SKT:D"]), float(row.get("SKT:T") or row["SKT:B"]))
     if not (near(b.bore, want[0], 1e-6) and near(b.diameter, want[1], 1e-6) and near(b.width, want[2], 1e-6)):
         bad.append((name, want, (b.bore, b.diameter, b.width)))
 out("Alle %d Bezeichnungen der Tabellen liefern ihre Maße" % len(idx), not bad and len(idx) > 50, bad[:3])
@@ -85,7 +86,27 @@ out("623-2Z gedeckelt, gleiche Hülle, mehr Material als 623",
     (round(o.shape.Volume(), 2), round(c.shape.Volume(), 2)))
 
 # 5) Selbstauskunft
-out("standards() nennt beide Lagerfamilien", len(standards()["bearings"]) == 2, list(standards()["bearings"].values()))
+out("standards() nennt alle fünf Lagerfamilien", len(standards()["bearings"]) == 5, list(standards()["bearings"].values()))
+
+# 5b) Die drei neuen Familien: Art, Breite, Masse, und die Kegelrollenbreite ist T statt B
+ang = Bearing("7200 BECBP", at=(0, 0, 0))
+cyl = Bearing("NJ 202 ECP", at=(0, 0, 0))
+tap = Bearing("30302 J2", at=(0, 0, 0))
+row = _bearing_index()["30302 J2"][0][1]
+out("Drei neue Familien mit ihrer Art und ihrer Massenspalte",
+    ang.kind == "ball" and cyl.kind == "roller" and tap.kind == "roller"
+    and ang.mass_g == 30.0 and cyl.mass_g == 48.0 and tap.mass_g == 94.0,
+    (ang.kind, cyl.kind, tap.kind, ang.mass_g, cyl.mass_g, tap.mass_g))
+out("Kegelrollenlager: Breite ist T (14,25), nicht B (13) — sonst 1,25 mm zu dünn",
+    near(tap.width, float(row["SKT:T"])) and not near(tap.width, float(row["SKT:B"]))
+    and near(bb(tap.shape)[5] - bb(tap.shape)[4], float(row["SKT:T"]), 1e-3),
+    (tap.width, row["SKT:T"], row["SKT:B"]))
+
+# 5c) Eine Walze ist keine Kugel: bei gleicher Hülle füllt sie den Ringraum deutlich mehr
+ball = _bearing_local(15, 35, 11, "ball", False)
+roll = _bearing_local(15, 35, 11, "roller", False)
+out("Walzenlager wird als Walze gezeichnet, nicht als Kugellager",
+    roll.Volume() > 1.1 * ball.Volume(), (round(ball.Volume(), 1), round(roll.Volume(), 1)))
 
 # 6) Fehler: unbekannte Nummer mit Vorschlag, leere Nummer, unbekannte Familie
 try:
@@ -96,6 +117,10 @@ except ValueError as e:
 out("608-2Z gibt es nicht: Vorschlag E2.608-2Z", "Did you mean" in msg and "E2.608-2Z" in msg, msg[:95])
 out("Leere Bezeichnung: Fehler", raises(lambda: Bearing("   ")))
 out("Unbekannte Familie: Fehler", raises(lambda: Bearing("608", family="kegelrollen")))
+out("family= wählt unter fünf Familien", Bearing("30302 J2", family="tapered", at=(0, 0, 0)).kind == "roller"
+    and Bearing("NJ 202 ECP", family="cylindrical", at=(0, 0, 0)).kind == "roller"
+    and Bearing("7200 BECBP", family="angular", at=(0, 0, 0)).kind == "ball"
+    and raises(lambda: Bearing("30302 J2", family="deep groove")))
 
 # 7) Lage: at, direction, outer, sunk
 b = Bearing("608", at=(10, 20, 30), direction="-Z")

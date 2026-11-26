@@ -25,6 +25,9 @@ Verwendet von `soma/fasteners.py`. Der Code dort ist eigener Code und übernimmt
 | `drill_sizes.csv` | Zollbohrer (Nummern und Buchstaben) für die Bohrungen der Gewindeeinsätze |
 | `single_row_deep_groove_ball_bearing_parameters.csv` | Rillenkugellager, offen (623, 604, 608, 6000, 6200, 6300 …) |
 | `single_row_capped_deep_groove_ball_bearing_parameters.csv` | Rillenkugellager, gedeckelt oder gedichtet (-2Z, -2RS1, -2RZ) |
+| `single_row_angular_contact_ball_bearing_parameters.csv` | Schrägkugellager (7200 BECBP …), 9 Größen |
+| `single_row_cylindrical_roller_bearing_parameters.csv` | Zylinderrollenlager (NJ 202 ECP …), 9 Größen |
+| `single_row_tapered_roller_bearing_parameters.csv` | Kegelrollenlager (30302 J2 …), 27 Größen |
 | `shoulder_screw.csv` | ISO 7379 (Schulterschraube) |
 | `low_profile_parameters.csv` | Flachkopf-Innensechskant nach OpenBuilds (nicht DIN 7984, siehe unten) |
 | `pan_head_parameters.csv` | ISO 1580 (Linsenkopf mit Schlitz) |
@@ -46,13 +49,12 @@ Verwendet von `soma/fasteners.py`. Der Code dort ist eigener Code und übernimmt
 | `o-ring_static_gland_parameters.csv` | Nut für statische Dichtung, radial und axial, je Schnurdicke |
 | `o-ring_dynamic_gland_parameters.csv` | Nut für dynamische Dichtung, radial, je Schnurdicke |
 
-Nicht kopiert, obwohl vorhanden: `single_row_angular_contact_ball_bearing_parameters.csv`,
-`single_row_cylindrical_roller_bearing_parameters.csv`, `single_row_tapered_roller_bearing_parameters.csv`. Kein Code
-liest sie, und eine Tabelle im Ordner, die niemand liest, ist genau der Fehler, vor dem die Inventur warnt.
-
-Ebenfalls nicht kopiert: `brad_tee_nut_parameters.csv`. Die Datei hat drei Zeilen, eine Marke, für M6/M8/M10 dieselben
+Nicht kopiert: `brad_tee_nut_parameters.csv`. Die Datei hat drei Zeilen, eine Marke, für M6/M8/M10 dieselben
 Werte und bei einer M6-Mutter einen Bund von 36 mm — ein abgeschriebenes Produktblatt, keine Norm. `BradTeeNut` ist
 auch upstream auskommentiert. Ohne brauchbare Tabelle gibt es kein T-Nut.
+
+Die drei Lagertabellen, die zuerst nicht kopiert wurden (Schrägkugel-, Zylinderrollen-, Kegelrollenlager), sind seit
+`Bearing` sie liest im Ordner — eine Tabelle, die niemand liest, ist genau der Fehler, vor dem die Inventur warnt.
 
 Bekannte Eigenheiten der Daten:
 
@@ -85,6 +87,14 @@ Eigenheiten der Lagertabellen, die den Code bestimmen:
 - Eine Zeile der gedeckelten Tabelle hat keine Bezeichnung (Zeile 8). `_bearing_index` überspringt sie.
 - In der Spalte `SKT:Designation` markiert ein vorangestelltes „* " eine Fußnote der Tabelle („* 625", zwölf Zeilen).
   `_bearing_index` entfernt es, die Bezeichnung ist „625".
+- **Die Kegelrollenlager-Tabelle hat `T` statt `B`.** `T` ist die Breite über alles, `B` die Innenringbreite (30302:
+  14,25 gegen 13). Ein Lager auf `B` wäre 1,25 mm zu dünn und ginge nicht ins Gehäuse; `BEARINGS["tapered"]` nennt
+  deshalb `width_col="T"`. Dieselbe Tabelle wiegt in `kg`, die anderen in `mass` — dafür gibt es `mass_col`.
+- **`a` ist kein Winkel.** Bei Schrägkugel- und Kegelrollenlagern ist `a` der Abstand von der Stirnfläche zur
+  Kegelspitze in mm, nicht der Anstellwinkel. Ein Kegel lässt sich daraus nicht zeichnen; `_bearing_local` zeichnet
+  deshalb auch für Kegelrollenlager Zylinder, und der Docstring sagt das.
+- Die Schrägkugellager-Tabelle hat eine Platzhalterzeile, deren Bezeichnung ein Halbgewindestrich ist („–"), die
+  Zylinderrollen-Tabelle eine mit leerer Bezeichnung. Beide überspringt `_NOT_A_NAME`, dieselbe Regel wie im Index.
 - Mehrere gedeckelte Lager heißen anders, als man sie bestellt: die Tabelle führt `E2.608-2Z` (SKF Energy Efficient),
   nicht `608-2Z`. `Bearing` rät nicht, sondern schlägt die ähnlichste Bezeichnung vor.
 - Die Tabelle führt die Masse in kg; `Bearing.mass_g` gibt sie in Gramm. Das ist der einzige Wert am Lager, der das

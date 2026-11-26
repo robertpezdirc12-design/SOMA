@@ -27,7 +27,7 @@ import math
 import cadquery as cq
 from soma.fasteners import (Screw, Nut, Washer, HeatSetInsert, Bearing, RetainingRing, ShaftKey, ORing,
                             SCREWS, NUTS, WASHERS, BEARINGS, RETAINING_RINGS, SHAFT_KEYS, O_RINGS, INSERT_BRANDS,
-                            ALIASES, HINTS, standards, _table, _inserts, _KEY)
+                            ALIASES, HINTS, standards, _table, _inserts, _KEY, _NOT_A_NAME)
 
 COS30 = math.cos(math.radians(30))
 built = {}
@@ -218,7 +218,7 @@ for key, spec in O_RINGS.items():
 for key, spec in BEARINGS.items():
     for _key, row in _table(spec["table"]):
         des = row.get("SKT:Designation", "").strip().lstrip("*").strip()  # "* 625" ist eine Fussnote der Tabelle
-        if not des:
+        if des in _NOT_A_NAME:  # leere Zeile oder ein Strich: ein Platzhalter, kein Lager
             skip("Lager (ohne Bezeichnung)")
             continue
 
@@ -306,7 +306,7 @@ const skipped = get('skipped')?.[1] ?? {};
 
 // Mindestzahlen: eine Tabelle, die plötzlich keine Zeile mehr liefert, fällt sonst nicht auf, weil "keine Fehler" auch
 // "nichts geprüft" heißen kann. Die Zahlen sind der Stand vom Durchlauf, nicht das Ziel.
-const MINIMUM = { Screw: 200, Nut: 100, Washer: 100, RetainingRing: 170, ShaftKey: 25, ORing: 340, Bearing: 50, HeatSetInsert: 140 };
+const MINIMUM = { Screw: 200, Nut: 100, Washer: 100, RetainingRing: 170, ShaftKey: 25, ORing: 340, Bearing: 95, HeatSetInsert: 140 };
 
 for (const [family, minimum] of Object.entries(MINIMUM)) {
   check(`${family}: jede Zeile der Tabellen wird gebaut`, (built[family] ?? 0) >= minimum,
