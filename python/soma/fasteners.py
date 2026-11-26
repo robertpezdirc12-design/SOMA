@@ -88,6 +88,19 @@ SCREWS = {
                     col="iso7379", head="shoulder", cols=("ds", "dk", "k", "b", "s", "t", "g2", "dg2")),
     "iso1580": dict(name="ISO 1580", title="Pan head screw, slotted", table="pan_head_parameters.csv",
                     col="iso1580", head="pan", cols=("dk", "k")),
+    # Kragen statt Unterlegscheibe: k ist die Hoehe ueber alles, c die Hoehe des Kragens
+    "iso7045": dict(name="ISO 7045", title="Pan head screw, cross recess", table="raised_cheese_head_parameters.csv",
+                    col="iso7045", head="pan", cols=("dk", "k")),
+    "din967": dict(name="DIN 967", title="Pan head screw with collar, cross recess",
+                   table="pan_head_with_collar_parameters.csv", col="din967", head="pan_collar",
+                   cols=("dk", "k", "c", "rf")),
+    # Schluessel ohne Bindestrich, weil _norm_standard ihn entfernt
+    "iso73802": dict(name="ISO 7380-2", title="Button head screw with collar",
+                      table="button_head_with_collar_parameters.csv", col="iso7380_2", head="button_collar",
+                      cols=("dk", "dl", "dc", "k", "rf", "c", "s", "t")),
+    "din1662": dict(name="DIN 1662", title="Hexagon bolt with flange, small series",
+                    table="hex_head_with_flange_parameters.csv", col="din1662", head="hex_flange",
+                    cols=("c", "dc", "k", "s")),
     "iso1207": dict(name="ISO 1207", title="Cheese head screw, slotted", table="cheese_head_parameters.csv",
                     col="iso1207", head="pan", cols=("dk", "k")),
     # Der Kopf ist niedriger als bei DIN 7984 und der Durchmesser groesser: eigene Reihe, kein DIN-7984-Ersatz
@@ -113,6 +126,8 @@ WASHERS = {
     "iso7091": dict(name="ISO 7091", title="Washer, coarse", table="plain_washer_parameters.csv", col="iso7091"),
     "iso7093": dict(name="ISO 7093", title="Washer, large", table="plain_washer_parameters.csv", col="iso7093"),
     "iso7090": dict(name="ISO 7090", title="Washer, chamfered", table="chamfered_washer_parameters.csv", col="iso7090"),
+    # Die Datei heisst nach ihrem ersten Verwender, die Spalten sind ISO 7092 (kleine Scheibe)
+    "iso7092": dict(name="ISO 7092", title="Washer, small", table="cheese_head_washer_parameters.csv", col="iso7092"),
     "din6797": dict(name="DIN 6797", title="Lock washer, internal teeth",
                     table="internal_tooth_lock_washer_parameters.csv", col="din6797", shape="toothed",
                     cols=("d1", "d2", "h", "n")),
@@ -136,6 +151,8 @@ HINTS = {
     "din439": "ISO 4035", "din125": "ISO 7089", "din9021": "ISO 7093",
     "din7984": "OpenBuilds (the low profile here is the OpenBuilds series: lower head than DIN 7984, "
                "larger head diameter; model DIN 7984 by hand if its height matters)",
+    "din1665": "DIN 1662, the bolt with flange — DIN 1665 is the nut with flange",
+    "din6921": "DIN 1662 (same flange head, different width across flats)",
 }
 
 
@@ -608,6 +625,26 @@ def _screw_local(head, d, length, pitch, dims):
         cap = cq.Workplane().circle(p["dk"] / 2).extrude(p["k"]).faces(">Z").chamfer(0.08 * p["k"]).val()
     elif head == "hex":
         cap = _chamfered_hex(p["s"], p["k"], both=False)
+    elif head == "hex_flange":
+        # Bund ist der untere Teil des Kopfes: k ist die Hoehe ueber alles, der Sechskant steht darueber
+        cap = _one(_chamfered_hex(p["s"], p["k"], both=False).fuse(_cyl(p["dc"], 0.0, p["c"])))
+    elif head == "button_collar":
+        # Linsenkopf mit Bund: k ueber alles, der Bund bis c, darueber die Kuppe
+        dk, dl, dc, k, rf, c = p["dk"], p["dl"], p["dc"], p["k"], p["rf"], p["c"]
+        mid = _arc_mid((dk / 2, c), (dl / 2, k), rf)
+        cap = (cq.Workplane("XZ").moveTo(0, 0).lineTo(0, k).lineTo(dl / 2, k)
+               .threePointArc(mid, (dk / 2, c)).lineTo(dc / 2 - c / 2, c)
+               .threePointArc((dc / 2, c / 2), (dc / 2 - c / 2, 0)).lineTo(0, 0).close()
+               .revolve(360, (0, 0, 0), (0, 1, 0)).val())
+        cap = _socket(cap, p["s"], p["t"], k)
+    elif head == "pan_collar":
+        # Flachkopf mit Bund: Scheibe dk bis zur Hoehe c, darueber die gewoelbte Kuppe mit Radius rf
+        dk, k, c, rf = p["dk"], p["k"], p["c"], p["rf"]
+        flat = math.sqrt(max(k - c, 0.0)) * math.sqrt(max(2 * rf - (k - c), 0.0))
+        mid = _arc_mid((flat, c), (0.0, k), rf)
+        cap = (cq.Workplane("XZ").moveTo(0, 0).lineTo(dk / 2, 0).lineTo(dk / 2, c).lineTo(flat, c)
+               .threePointArc(mid, (0, k)).lineTo(0, 0).close()
+               .revolve(360, (0, 0, 0), (0, 1, 0)).val())
     elif head == "shoulder":
         # Kopf, Schulter, Freistich und Gewindeende in einem Rotationsprofil. Der Freistich ist enger
         # als das Gewinde; aus Zylindern zusammengesetzt entstuende dort eine Bohrung statt einer Nut.
@@ -677,10 +714,12 @@ class Screw(_Part):
 
     @property
     def head_diameter(self):
-        """Head diameter, for a hex head the width across corners."""
+        """Head diameter: the collar when there is one, else across corners for a hex head, else `dk`."""
+        if "dc" in self.dims:
+            return self.dims["dc"]
         if self.head == "hex":
             return self.dims["s"] / COS30
-        return self.dims["dk"] if "dk" in self.dims else self.d
+        return self.dims.get("dk", self.d)
 
     @property
     def head_height(self):

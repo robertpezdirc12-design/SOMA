@@ -280,6 +280,39 @@ out("Stuetzringe und Stirnflaechennuten werden abgelehnt, wo die Tabelle sie nic
     and ORing("025", at=(0, 0, 0)).gland_spec(backing_rings=2)["width"] > o.gland_spec()["width"]
     and raises(lambda: o.gland("face", "dynamic")) and raises(lambda: o.gland("piston")))
 
+hf = Screw("DIN 1662", "M6x30", at=(0, 0, 0))
+out("DIN 1662 M6: Bund 13,6 breit, darueber der Sechskant mit 8 mm Schluesselweite",
+    len(hf.shape.Solids()) == 1 and hf.shape.isValid() and near(hf.head_diameter, 13.6, 1e-9)
+    and near(hf.key, 8.0, 1e-9) and near(hf.head_height, 6.9, 1e-9)
+    and near(dia_at(hf.shape, 0.5), 13.6, 0.01) and near(dia_at(hf.shape, 2.0), 8.0 / COS30, 0.01),
+    (hf.head_diameter, round(dia_at(hf.shape, 2.0), 2)))
+
+bc = Screw("ISO 7380-2", "M5x20", at=(0, 0, 0))
+pc = Screw("DIN 967", "M5x20", at=(0, 0, 0))
+flat = math.sqrt(pc.dims["k"] - pc.dims["c"]) * math.sqrt(2 * pc.dims["rf"] - (pc.dims["k"] - pc.dims["c"]))
+out("Kragenkoepfe: Bund in der Mitte voll breit, darueber der Kopf — und k ist die Hoehe ueber alles",
+    len(bc.shape.Solids()) == 1 and len(pc.shape.Solids()) == 1
+    and near(dia_at(bc.shape, 0.5), bc.dims["dc"], 0.01) and near(dia_at(bc.shape, bc.dims["c"] + 0.2), bc.dims["dk"], 0.3)
+    and near(dia_at(pc.shape, 0.5), pc.dims["dk"], 0.01) and near(dia_at(pc.shape, pc.dims["c"] + 0.01), 2 * flat, 0.02)
+    and near(bc.head_height, bc.dims["k"], 1e-9) and near(pc.head_height, pc.dims["k"], 1e-9),
+    (round(dia_at(bc.shape, 0.5), 2), round(dia_at(pc.shape, 0.5), 2), round(2 * flat, 2)))
+
+out("Kreuzschlitzkoepfe haben keine Schluesselweite: ISO 7045 und DIN 967 geben None, ISO 7380-2 nicht",
+    Screw("ISO 7045", "M5x20", at=(0, 0, 0)).key is None and pc.key is None and near(bc.key, 3.08, 1e-9))
+
+out("ISO 1580 kennt die Laengen 6 und 8 — in der Tabelle stand \"68\" statt \"6,8\"",
+    lengths("ISO 1580", "M3")[:4] == [4.0, 5.0, 6.0, 8.0]
+    and near(Screw("ISO 1580", "M3x8", at=(0, 0, 0)).length, 8, 1e-9), lengths("ISO 1580", "M3")[:6])
+
+out("DIN 1665 ist die Mutter; wer sie als Schraube verlangt, bekommt DIN 1662 genannt",
+    raises(lambda: Screw("DIN 1665", "M6x30", at=(0, 0, 0)))
+    and Nut("DIN 1665", "M6", at=(0, 0, 0)).key > 0)
+
+sw = Washer("ISO 7092", "M3", at=(0, 0, 0))
+out("ISO 7092 M3: kleine Scheibe 3,2 x 6,0 x 0,55",
+    len(sw.shape.Solids()) == 1 and near(sw.inner, 3.2, 1e-9) and near(sw.outer_diameter, 6.0, 1e-9)
+    and near(sw.thickness, 0.55, 1e-9), (sw.inner, sw.outer_diameter, sw.thickness))
+
 # --- G9, G10, G11, G4: Werkzeuge und Meldungen -------------------------------------------------------------
 
 s6 = Screw("ISO 4762", "M6x20", at=(0, 0, 0))
@@ -343,7 +376,7 @@ for (const line of lines) {
   const [label, ok, detail] = JSON.parse(line);
   check(label, ok, detail);
 }
-check('Python-Prüfungen liefen durch', lib.status === 0 && lines.length >= 41,
+check('Python-Prüfungen liefen durch', lib.status === 0 && lines.length >= 47,
   lib.status === 0 ? `${lines.length} Prüfungen` : (lib.stderr ?? '').slice(-300));
 
 const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'soma-hardware-'));

@@ -49,10 +49,11 @@ hole it needs come from the same table row, so they cannot drift apart.
 | Heat-set insert | ruthex, CNCKitchen, McMaster-Carr, Hilitchi, AE-SamZhihui |
 | Shoulder screw | ISO 7379 |
 | Low profile socket head | OpenBuilds series (not DIN 7984 — see G3) |
-| Pan head, cheese head | ISO 1580, ISO 1207 |
+| Pan head, cheese head | ISO 1580, ISO 1207, ISO 7045 (cross recess) |
+| Heads with a collar | DIN 967, ISO 7380-2, DIN 1662 (hex with flange) |
 | Flange nut, domed cap nut | DIN 1665, DIN 1587 |
 | Hex nut, unchamfered | ISO 4036 |
-| Chamfered washer, internal-tooth lock washer | ISO 7090, DIN 6797 |
+| Chamfered washer, internal-tooth lock washer, small washer | ISO 7090, DIN 6797, ISO 7092 |
 | Deep-groove ball bearing | 56 catalogue numbers, open and capped, bore 3–10 mm |
 | Retaining ring | DIN 471 (shaft), DIN 472 (bore) |
 | Parallel key | DIN 6885 form A |
@@ -60,16 +61,21 @@ hole it needs come from the same table row, so they cannot drift apart.
 
 ### 1.3 Data tables
 
-30 of the 48 files in `bd_warehouse/src/bd_warehouse/data/` are present, and every one of them is read by the
+35 of the 48 files in `bd_warehouse/src/bd_warehouse/data/` are present, and every one of them is read by the
 module. The copy is lean, not accidental: what is missing falls into two groups.
 
 | Missing | Why |
 |---|---|
 | three bearing tables (angular contact, cylindrical roller, tapered roller) | No code reads them — see G1a |
-| `hex_head_with_flange_parameters.csv`, `button_head_with_collar_parameters.csv`, `pan_head_with_collar_parameters.csv`, `raised_cheese_head_parameters.csv`, `raised_countersunk_oval_head_parameters.csv`, `cheese_head_washer_parameters.csv`, `imperial_set_screw_parameters.csv`, `metric_set_screw_parameters.csv`, `brad_tee_nut_parameters.csv` | No part needs them yet; the T-nut table is unusable (see G8) |
+| `raised_countersunk_oval_head_parameters.csv`, `imperial_set_screw_parameters.csv`, `metric_set_screw_parameters.csv`, `brad_tee_nut_parameters.csv` | No part needs them yet; the T-nut table is unusable (see G8) |
 | `iso10664def.csv`, `iso_228_1.csv`, four plastic-bottle thread tables | Thread profiles and bottle threads — nothing in SOMA models a thread |
 
 `drill_sizes.csv` is present but only used to resolve heat-set insert holes (`_drill_mm`).
+
+One row was **corrected**, the only deviation from "copied unchanged": in `nominal_screw_lengths.csv` the ISO 1580
+series read `2,2.5,3,4,5,68,10,…` — `68` for `6,8`. M3x6 and M3x8, two of the most common pan head screws there are,
+were rejected as non-standard lengths. The series now reads `…,4,5,6,8,10,…`, and every other row was checked for
+ascending values (only the two imperial rows repeat 6.25, and nothing reads them).
 
 ---
 
@@ -108,9 +114,23 @@ The low profile series in the table is **OpenBuilds, not DIN 7984**: the head is
 (5.68 vs 5.5 mm). It is registered under the name it really is, and asking for "DIN 7984" answers with that sentence
 instead of quietly handing out different dimensions.
 
-Pan head (ISO 1580) and cheese head (ISO 1207) share one `head="pan"` branch — a flat cylinder with a chamfered rim,
-which is what both are. The slot is not modelled, so `Screw.key` returns `None` for them instead of inventing a width
-across flats; the pan head is visibly the flat one (M3: 1.8 mm high against 3.0 mm for a socket head).
+Pan head (ISO 1580), cheese head (ISO 1207) and the cross-recess pan head (ISO 7045) share one `head="pan"` branch —
+a flat cylinder with a chamfered rim, which is what all three are. The slot is not modelled, so `Screw.key` returns
+`None` for them instead of inventing a width across flats; the pan head is visibly the flat one (M3: 1.8 mm high
+against 3.0 mm for a socket head).
+
+**Heads with a collar** — `DIN 967` (pan with collar), `ISO 7380-2` (button with collar) and `DIN 1662` (hex with
+flange) — are the same idea three times: the bearing surface is widened by a disc of `dc` and height `c`, and `k` is
+the height over all, so the collar is the *lower part* of the head and not an addition to `k`. Getting that wrong
+would make every one of them too tall by `c`. The collar is drawn as a cylinder: the 25° underside and the c/2 rim
+rounding change neither the envelope nor the bearing face.
+
+`head_diameter` now prefers `dc` when the table has one, because for these three the widest point is the collar, not
+`dk` — for DIN 1662 M6 that is 13.6 mm against 6.93 mm across the hexagon corners.
+
+`Washer("ISO 7092")` came in with the same batch: a small plain washer whose table is called
+`cheese_head_washer_parameters.csv`, after its first user. ISO 7092 goes down to M1, which the rest of the washer
+family does not.
 
 **G4. `ISO 4014` / `DIN 931` are modelled as fully threaded.** ✅ **Done, as the second option.** The table has no
 thread-length column, so there was nothing to read: `Screw.thread_length` now computes the standard value

@@ -29,6 +29,11 @@ Verwendet von `soma/fasteners.py`. Der Code dort ist eigener Code und übernimmt
 | `low_profile_parameters.csv` | Flachkopf-Innensechskant nach OpenBuilds (nicht DIN 7984, siehe unten) |
 | `pan_head_parameters.csv` | ISO 1580 (Linsenkopf mit Schlitz) |
 | `cheese_head_parameters.csv` | ISO 1207 (Zylinderkopf mit Schlitz) |
+| `raised_cheese_head_parameters.csv` | ISO 7045 (Flachkopf mit Kreuzschlitz) |
+| `pan_head_with_collar_parameters.csv` | DIN 967 (Flachkopf mit Bund und Kreuzschlitz) |
+| `button_head_with_collar_parameters.csv` | ISO 7380-2 (Linsenkopf mit Bund) |
+| `hex_head_with_flange_parameters.csv` | DIN 1662 (Sechskantschraube mit Bund) |
+| `cheese_head_washer_parameters.csv` | ISO 7092 (kleine Scheibe) |
 | `hex_nut_with_flange_parameters.csv` | DIN 1665 (Sechskantmutter mit Bund) |
 | `unchamfered_hex_nut_parameters.csv` | ISO 4036 (Sechskantmutter ohne Fase) |
 | `domed_cap_nut_parameters.csv` | DIN 1587 (Hutmutter) |
@@ -58,6 +63,11 @@ Bekannte Eigenheiten der Daten:
   lehnt diese Einsätze mit einer Meldung ab.
 - Bei ISO 4035 M3 steht die Zeile unter der Steigung 0,45 statt 0,5. `soma` nimmt dann die vorhandene Zeile, denn ohne
   Gewinde zählt nur der Durchmesser.
+- **Eine Zeile wurde korrigiert**, und das ist die einzige Abweichung von „unverändert übernommen": in
+  `nominal_screw_lengths.csv` stand für `iso1580` die Reihe `2,2.5,3,4,5,68,10,…` — „68" statt „6,8". Damit fehlten
+  M3x6 und M3x8, zwei der meistverkauften Linsenkopfschrauben überhaupt, und `Screw("ISO 1580", "M3x8")` wurde als
+  unzulässige Länge abgelehnt. Die Reihe heißt jetzt `…,4,5,6,8,10,…`. Alle anderen Reihen wurden auf aufsteigende
+  Werte geprüft; nur die beiden Zoll-Reihen enthalten ein doppeltes 6.25, das niemanden betrifft.
 
 Eigenheiten der Lagertabellen, die den Code bestimmen:
 
@@ -93,6 +103,19 @@ Eigenheiten der neuen Tabellen:
   und `Screw.key` gibt für diese Köpfe `None` zurück, statt eine Schlüsselweite zu erfinden, die es nicht gibt.
   `pan_head_parameters.csv` enthält außerdem Spalten für ISO 14583 und ASME B18.6.3 und Zeilen in Zoll; genutzt wird
   nur `iso1580` von M1.6 bis M10, die Zollzeilen haben dort leere Felder.
+- `hex_head_with_flange_parameters.csv` enthält zwei Spaltensätze, `din1662` und `din1665`. Genutzt wird nur
+  `din1662`: DIN 1665 ist die **Mutter** mit Bund (eigene Datei), die Schraube mit Bund ist DIN 1662. Wer „DIN 1665"
+  als Schraube verlangt, bekommt das gesagt statt der Mutternmaße. Die Zeile M20 ist in der `din1662`-Spalte leer —
+  die Reihe geht bis M16, und `soma` meldet das.
+- Bei den drei Kragenköpfen (`DIN 967`, `ISO 7380-2`, `DIN 1662`) ist `k` die **Höhe über alles**, `c` die Höhe des
+  Bunds. Der Bund ist also der untere Teil des Kopfes und nicht zusätzlich zu `k` zu rechnen — bei DIN 1662 steht der
+  Sechskant darüber, bei den beiden anderen die Kuppe. Der Bund ist als Zylinder mit `dc` gezeichnet; die 25°-Schräge
+  und die Rundung am Bundrand (Radius `c/2`) sind nicht modelliert, sie ändern weder Hüllmaß noch Auflagefläche.
+- `raised_cheese_head_parameters.csv` heißt nach der alten Bezeichnung „raised cheese head"; die Spalten sind
+  **ISO 7045**, also der Flachkopf mit Kreuzschlitz. Geometrisch derselbe Kopf wie ISO 1580 (der Kreuzschlitz wird
+  nicht gezeichnet), deshalb dieselbe Kopfverzweigung.
+- `cheese_head_washer_parameters.csv` enthält **keine Kopfmaße**, sondern die Scheibe **ISO 7092** (klein, `d1`, `d2`,
+  `h`). Der Dateiname kommt von ihrem ersten Verwender. Sie liegt deshalb bei den Scheiben, nicht bei den Schrauben.
 - `cheese_head_parameters.csv` hat **keine Überschrift in der ersten Spalte**; die Größe steht unter einem leeren
   Namen. `_table` nimmt die erste Spalte unabhängig von ihrem Namen, deshalb fällt das nur beim Lesen der Datei auf.
 - `hex_nut_with_flange_parameters.csv` (DIN 1665, M5 bis M20): `c` ist die Dicke des Bundes, `dc` sein Durchmesser,

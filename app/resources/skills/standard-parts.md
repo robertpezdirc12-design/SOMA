@@ -37,15 +37,21 @@ add_part("Screw 1", s, group="Hardware")               # role "hardware" automat
   of thickness `T`: `w = Washer("ISO 7089", "M3", at=s.point(T), direction="+Z")`, then
   `Nut("ISO 4032", "M3", at=w.outer, direction="+Z")`.
 - Standards: screws ISO 4762 (socket head, the default), ISO 7380 (button head, low), ISO 10642 (countersunk),
-  ISO 4017, ISO 4014, DIN 931 (hex head), ISO 4026 (set screw), ISO 1580 (pan head), ISO 1207 (cheese head).
+  ISO 4017, ISO 4014, DIN 931 (hex head), ISO 4026 (set screw), ISO 1580 (pan head), ISO 1207 (cheese head),
+  ISO 7045 (pan head, cross recess), DIN 967 (pan head with collar), ISO 7380-2 (button head with collar), DIN 1662
+  (hex head with flange).
   Nuts ISO 4032, thin ISO 4035, high ISO 4033, thin and unchamfered ISO 4036, square DIN 557, with flange DIN 1665,
 domed cap DIN 1587. Washers
-  ISO 7089, large ISO 7093 on soft material, chamfered ISO 7090, internal-tooth lock DIN 6797. Inserts by ruthex
+  ISO 7089, large ISO 7093 on soft material, chamfered ISO 7090, internal-tooth lock DIN 6797, small ISO 7092.
+  Inserts by ruthex
   (default), CNCKitchen, McMaster-Carr, Hilitchi. In prints, heat-set inserts instead of nuts where the screw is
   opened often.
-- Slotted heads (ISO 1580, ISO 1207) have no hex socket, so `s.key` is `None` — check before using it. The cap nut
-  DIN 1587 is closed, so a screw through it has to stop inside the dome, and `nut.height` is only the hexagon:
-  `nut.overall_height` is the height to the top of the dome.
+- Slotted heads (ISO 1580, ISO 1207) and cross-recess heads (ISO 7045, DIN 967) have no hex socket, so `s.key` is
+  `None` — check before using it. The cap nut DIN 1587 is closed, so a screw through it has to stop inside the dome,
+  and `nut.height` is only the hexagon: `nut.overall_height` is the height to the top of the dome.
+- Heads with a collar (DIN 967, ISO 7380-2, DIN 1662) carry their own bearing surface: the collar is `c` high and
+  `dc` across, and `s.head_height` (`k`) already includes it — do not add `c` on top. `s.head_diameter` gives the
+  collar, which is the widest point and the number a counterbore needs.
 - Tapping into metal: `s.tap_hole(material="hard")` for steel, the default `"soft"` is for aluminium, brass and
   plastic. The two drills differ (M6: 5.0 against 5.4 mm), and using the soft one in steel makes the tap tear.
 - Read sizes from the objects instead of typing numbers: `s.head_diameter`, `s.head_height`, `s.key`, `s.clearance()`,
@@ -184,8 +190,10 @@ add_part("Seal", o, group="Hardware")
 ## What the library covers, and what it does not
 
 Covered: screws ISO 4762, 7380, 10642, 4017, 4014, DIN 931, 4026, 7379 (shoulder), 1580 (pan head), 1207 (cheese
-head) and the OpenBuilds low profile series; nuts ISO 4032, 4033, 4035, 4036 (thin, no chamfer), DIN 557, DIN 1665
-(flange), DIN 1587 (domed cap); washers ISO 7089, 7091, 7093, 7090 (chamfered), DIN 6797 (internal teeth); heat-set inserts from five makers;
+head), 7045 (pan head, cross recess), 7380-2 (button with collar), DIN 967 (pan with collar), DIN 1662 (hex with
+flange) and the OpenBuilds low profile series; nuts ISO 4032, 4033, 4035, 4036 (thin, no chamfer), DIN 557, DIN 1665
+(flange), DIN 1587 (domed cap); washers ISO 7089, 7091, 7093, 7090 (chamfered), 7092 (small), DIN 6797 (internal
+teeth); heat-set inserts from five makers;
 deep-groove ball bearings from 3 to 10 mm bore, open and capped; retaining rings DIN 471 and DIN 472 for shafts and
 bores from 3 to 300 mm; parallel keys DIN 6885 for shafts from 6 to 50 mm; O-rings ISO 3601 in 349 sizes with the
 groove for shaft, bore and face seals; and the clearance holes, tap drills, counterbores, nut traps, insert holes,
