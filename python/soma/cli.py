@@ -329,10 +329,10 @@ def cmd_inspect(args):
     from . import inspection
     try:
         if args.step:
-            doc = inspection.from_file(args.step, fast=args.fast, density=args.density)
+            doc = inspection.from_file(args.step, fast=args.fast, density=args.density, overlaps=args.overlaps)
         else:
             doc = inspection.from_model(args.project, args.entry, args.parts and args.parts.split(","),
-                                        fast=args.fast, density=args.density)
+                                        fast=args.fast, density=args.density, overlaps=args.overlaps)
     except inspection.InspectError as e:
         if args.json:
             print(json.dumps(dict(schema=inspection.SCHEMA, ok=False, error=str(e)), ensure_ascii=False))
@@ -661,6 +661,10 @@ def main(argv=None):
                                                                  "for PLA, 2.7 for aluminium")
     i.add_argument("--fast", action="store_true", help="skip the validity check (isValid is the slow part on "
                                                        "freeform parts)")
+    i.add_argument("--overlaps", action="store_true",
+                   help="also measure which parts cut into each other (one boolean intersection per candidate "
+                        "pair, so slower on a big model). A pair that overlaps is an error: the two parts cannot "
+                        "be assembled as modelled")
     i.add_argument("--out", metavar="FILE", help="write the JSON document to this file as well")
     i.add_argument("--strict", action="store_true", help="exit code 1 when the geometry has an error (for CI)")
     i.add_argument("--project", default=".")

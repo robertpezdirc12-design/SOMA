@@ -67,6 +67,7 @@ A picture shows that a model looks right, not that it is right. `soma inspect` m
 ```bash
 soma inspect --json                                  # the whole model, one document
 soma inspect --parts Lid --json                      # one part
+soma inspect --overlaps                              # also: which pairs cut into each other
 soma inspect --strict                                # exit code 1 on a geometric error
 ```
 
@@ -78,6 +79,10 @@ number can be compared between two builds.
   Fix that before anything else.
 - **`valid: false`** means OCCT found a broken face or edge, usually after a cut or a fillet. Do not export it.
 - **`multiple_bodies`**: two solids in one part. Either two parts that should be separate, or a boolean that missed.
+- **`--overlaps`** answers the question a single part cannot: does this part share space with another? Each pair comes
+  with the volume of the common body and its depth, so a flat sliver along a contact face (noise) and a real
+  penetration (a part in the wrong place) are told apart. It costs one intersection per candidate pair, so it is not
+  on by default.
 - Write the expected volume into the code as an assertion while you work out a fit; delete it afterwards. Two numbers
   that should match (a bore that must take a shaft, a pocket that must hold a nut) are worth checking numerically, not
   by eye.

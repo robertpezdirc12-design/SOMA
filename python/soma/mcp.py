@@ -55,7 +55,8 @@ TOOLS = [
         description="Measured facts about the built model, without writing anything: volume, surface area, bounding "
                     "box, centre of mass, number of solids/shells/faces/edges/vertices, whether each part is a valid "
                     "closed body, and a list of problems (no solid, invalid shape, duplicate). Use it to check that "
-                    "a change did what it should instead of guessing from a picture.",
+                    "a change did what it should instead of guessing from a picture. With overlaps=true it also "
+                    "reports which parts cut into each other, which is how an assembly is checked.",
         inputSchema=dict(type="object", properties=dict(
             parts=dict(type="array", items=dict(type="string"),
                        description="Only these part names. Default: all parts."),
@@ -63,6 +64,10 @@ TOOLS = [
                          description="Material density in g/cm³ for a mass estimate, e.g. 1.24 for PLA, 2.7 for "
                                      "aluminium, 7.85 for steel."),
             fast=dict(type="boolean", description="Skip the validity check (the slow part on freeform geometry)."),
+            overlaps=dict(type="boolean",
+                          description="Also measure which parts cut into each other, with the volume and the depth "
+                                      "of each pair. Slower: one boolean intersection per candidate pair. Use it on "
+                                      "an assembly, where a part in the wrong place is the usual mistake."),
         ), additionalProperties=False),
     ),
     dict(
@@ -185,7 +190,7 @@ def tool_inspect(root, args):
     """Messen. Dieselben Zahlen wie `soma inspect --json`."""
     from . import inspection
     doc = inspection.from_model(root, only=args.get("parts"), fast=bool(args.get("fast")),
-                                density=args.get("density"))
+                                density=args.get("density"), overlaps=bool(args.get("overlaps")))
     return inspection.text(doc), doc
 
 

@@ -141,6 +141,9 @@ shaft = shaft.cut(ring.groove())                               # the groove the 
 - `ring.free_diameter` (d3) is the free inner or outer diameter — smaller than the shaft for DIN 471, larger than the
   bore for DIN 472, which is what makes it grip. `ring.groove_diameter` and `ring.groove_width` are the values for the
   drawing.
+- `mounted=True` builds the ring at the groove diameter instead of the free one. A 10 mm ring is 9.3 mm free and its
+  groove 9.6 mm, so a free ring sticks 0.15 mm into the shaft all the way round: that is how a circlip is made, but
+  `soma inspect --overlaps` reports it as a collision. In an assembly, use `mounted=True`.
 - Put the ring against a shoulder that takes the axial load, not in the middle of a shaft. The groove weakens the
   shaft: for a 20 mm shaft it is 1.5 mm deep, so do not put a bending load right there.
 
@@ -149,7 +152,8 @@ shaft = shaft.cut(ring.groove())                               # the groove the 
 ```python
 from soma.fasteners import ShaftKey
 
-key = ShaftKey(20, 40, at=(0, 10, 20))       # 20 mm shaft, 40 mm long, `at` on the shaft surface
+# Shaft along X, axis at y = 10, z = 10: `at` is its top point, so the key already lies along the shaft.
+key = ShaftKey(20, 40, at=(0, 10, 20))       # 20 mm shaft, 40 mm long
 add_part("Key", key, group="Hardware")
 shaft = shaft.cut(key.keyway("shaft"))        # milled, rounded ends, 3.5 mm deep
 hub = hub.cut(key.keyway("hub"))              # broached, square ends, 2.8 mm deep
@@ -159,6 +163,16 @@ hub = hub.cut(key.keyway("hub"))              # broached, square ends, 2.8 mm de
 - The key straddles the surface: `at` is a point on the shaft, it goes `shaft_depth` in and `height - shaft_depth` out.
   Those two depths are not the same number and they are not interchangeable — the shaft groove and the hub groove are
   cut to different depths, and the difference is the clearance that lets the hub slide on.
+- **The key lies in the plane of `at`, with its length along local X.** For a shaft that runs along Z, the length has
+  to be turned onto Z, and the material direction has to point at the axis:
+
+  ```python
+  key = ShaftKey(10, 20, at=(0, 5, 46), direction="-Y", angle=90)   # shaft along Z, `at` on the +Y surface
+  ```
+
+  Without `direction` the default is `-Z` and the key lies *across* the shaft — it looks plausible in the viewer and
+  `soma inspect --overlaps` then finds it half buried. The same rule holds for `keyway()`: it is cut at the placement
+  of the key, so a wrong placement cuts the wrong groove.
 - `keyway("shaft")` has rounded ends because it is milled with an end mill; `keyway("hub")` is square because it is
   broached. Both sit at the same `at` and `direction`, so the shaft and the hub line up.
 

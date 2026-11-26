@@ -102,6 +102,17 @@ try {
   check('--parts Lid: ein Teil, Summen nur für dieses Teil', one.parts.length === 1 && one.totals.parts === 1
     && one.totals.solids === 1, JSON.stringify(one.totals));
 
+  // --overlaps ist die einzige Prüfung, die Paare misst: ohne die Angabe steht das Feld nicht da (die Ausgabe bleibt
+  // so schnell und so bytegleich wie vorher), mit ihr steht es da. Dieses Testmodell hat zwei gleiche Körper (TwinA,
+  // TwinB), die absichtlich ineinander und in die Platte ragen — genau das muss herauskommen.
+  const ov = json(['--overlaps']).doc;
+  const pairs = (ov.overlaps ?? []).map((o) => `${o.a}/${o.b}`);
+  check('--overlaps: drei Paare mit 125 mm³ und 1,67 mm Tiefe, ohne die Angabe gar kein Feld',
+    pairs.join() === 'Plate/TwinA,Plate/TwinB,TwinA/TwinB'
+    && (ov.overlaps ?? []).every((o) => o.volume === 125 && o.thickness === 1.6667)
+    && ov.ok === false && !('overlaps' in doc),
+    `${JSON.stringify(ov.overlaps)} / ohne: ${'overlaps' in doc}, ok ${ov.ok}`);
+
   // 7) Rundlauf: Modell -> STEP -> Messung der Datei. Anderer Code-Weg, gleiche Zahlen.
   const exp = py(['export', '--assembly', '--format', 'step', '--project', dir]);
   const step = path.join(dir, 'exports', `${path.basename(dir)}.step`);

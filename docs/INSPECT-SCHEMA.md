@@ -11,6 +11,7 @@ soma inspect --json               # the document, one line
 soma inspect --out report.json    # the document, indented, for a diff
 soma inspect --step exports/x.step
 soma inspect --density 1.24       # mass estimate for PLA
+soma inspect --overlaps           # also measure which parts cut into each other
 soma inspect --strict             # exit code 1 when the geometry has an error
 ```
 
@@ -32,6 +33,7 @@ through the writer — so a match is evidence, not a tautology.
   "bounds": { ... },
   "totals": { ... },
   "parts": [ ... ],
+  "overlaps": [ ... ],
   "checks": { "ok": true, "issues": [] },
   "ok": true
 }
@@ -46,6 +48,7 @@ through the writer — so a match is evidence, not a tautology.
 | `bounds` | object \| null | Box around everything (Section 3). |
 | `totals` | object | Sums over all parts (Section 4). |
 | `parts` | array | One entry per part (Section 5). |
+| `overlaps` | array | Only with `--overlaps`: pairs that cut into each other (Section 6). |
 | `checks` | object | Measured problems (Section 6). |
 | `ok` | bool | `checks.ok`. The only field a caller has to read for a pass/fail gate. |
 
@@ -139,7 +142,33 @@ entries are `Solid 1`, `Solid 2`, … — a wrong name is worse than a generic o
 
 ---
 
-## 6. `checks`
+## 6. `overlaps` and `checks`
+
+### `overlaps` (only with `--overlaps`)
+
+```json
+"overlaps": [ { "a": "Shaft", "b": "Ring A", "volume": 4.2273, "thickness": 0.1298 } ]
+```
+
+One entry per pair of parts whose solids really occupy the same space, sorted by name. `thickness` is `2 V / A` of
+the common volume, which turns a volume into a depth: a flat sliver along a contact face has plenty of volume and no
+depth, a needle has depth and no volume. A pair is only reported when **both** are above the noise floor
+(`volume > 1e-3 mm³` **and** `thickness > 0.01 mm`), so parts that merely touch in a face are not reported.
+
+Each pair also becomes an `error` in `checks.issues` (code `overlap`), so `--overlaps --strict` is a gate in CI. The
+measurement costs one boolean intersection per candidate pair, which is why it is opt-in: a bounding-box test throws
+away most pairs first, but a model with a hundred parts that all share a box is still a hundred intersections.
+Reference parts (`role="reference"`) are left out — they are brought along to measure against, so overlapping them is
+intended.
+
+Two overlaps are not defects and both have a reason:
+
+- **A press fit** is nominal in the model, so it overlaps by nothing. If it shows up here, the bore is drawn at the
+  nominal size and the shaft at its upper limit, which is a drawing error, not a fit.
+- **A circlip in its free state** is smaller than its own groove (`d3 < d2`), so it always overlaps the shaft by
+  `(d2 - d3) / 2`. Use `RetainingRing(..., mounted=True)` in an assembly that measures interference.
+
+### `checks`
 
 ```json
 { "ok": false,
@@ -154,14 +183,15 @@ entries are `Solid 1`, `Solid 2`, … — a wrong name is worse than a generic o
 | `invalid_shape` | error | `isValid()` is false: a broken face or edge. |
 | `no_solid` | error | No closed body. Error for a part, **warning for a reference** (a reference surface is legitimate). |
 | `zero_volume` | error | Has a solid but the volume is 0. |
+| `overlap` | error | Only with `--overlaps`: this part cuts into another one. |
 | `multiple_bodies` | warning | More than one solid in one part. Intentional, or two parts that should be two entries? |
 | `open_shell` | warning | A shell is not closed. Booleans on it are unreliable. |
 | `no_geometry` | warning | The part carries no geometry at all. |
 | `duplicate_bounds` | warning | Identical bounding box as another part: a copy nobody wanted, or a part placed twice. |
 
-The checks are deliberately cheap and deterministic. Interference between parts is **not** here: that is
-`soma analyze clearance`. A comparison against an expected value is not here either: that belongs to the caller,
-which is exactly what `totals` is for.
+The checks are deliberately cheap and deterministic. Interference between parts is measured only when asked for
+(`--overlaps`), because it is the one check whose cost grows with the square of the part count. A comparison against
+an expected value is not here either: that belongs to the caller, which is exactly what `totals` is for.
 
 ---
 
@@ -203,11 +233,19 @@ diff <(python -m json.tool before.json) <(python -m json.tool after.json)
 soma inspect --density 1.24 --json | python -c "import json,sys; print(json.load(sys.stdin)['totals']['mass_g'], 'g')"
 ```
 
+**Gate an assembly on nothing cutting into anything else.**
+
+```bash
+soma inspect --overlaps --strict          # exit code 1 when two parts share space
+soma inspect --overlaps --json | python -c "import json,sys; [print(o) for o in json.load(sys.stdin)['overlaps']]"
+```
+
 ---
 
 ## 8. What is not measured (yet)
 
-- **Interference between parts.** Needs pairwise booleans; `soma analyze clearance` does the sampled version.
+- **Interference between parts** by default: it needs pairwise booleans, so it is behind `--overlaps` (Section 6).
+  `soma analyze clearance` gives the sampled version, as a map over the surfaces.
 - **Wall thickness.** `soma analyze thickness`.
 - **Minimum radius, draft angle, overhang.** `soma analyze overhang` covers overhang only.
 - **Thread length of partially threaded screws.** Not modelled at all; see `docs/FASTENERS-INVENTORY.md`, gap G4.

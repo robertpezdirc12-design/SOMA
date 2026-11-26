@@ -158,6 +158,11 @@ meant for; the lugs are rectangles with a plier hole, which is a drawing rather 
 shape to the maker). `groove()` cuts the matching groove: floor at `d2`, width `m`, centred on the ring. `d4` is not
 used — the column means different things in the two tables and is not guessed at.
 
+`mounted=True` builds the ring at the groove diameter instead of the free one. The tables always have `d3 < d2` (a
+10 mm ring: 9.3 free against a 9.6 groove), so a free-state ring overlaps the shaft by `(d2 - d3) / 2` all the way
+round — how a circlip is made, but an assembly that measures interference sees a collision. Found while building
+`docs/examples/bearing-block`; the default is unchanged, so nothing that was modelled before moves.
+
 **G6. Shaft keys and keyways (DIN 6885).** ✅ **Done** — `ShaftKey("DIN 6885", 20, 40, at=...)` or `ShaftKey(20, 40)`,
 form A with rounded ends, all 31 shaft sizes. The key sits in the shaft keyway: `at` is the point on the shaft
 surface, it reaches `shaft_depth` in and `height - shaft_depth` out. `keyway("shaft")` cuts the milled groove with
@@ -166,6 +171,11 @@ rounded ends and `keyway("hub")` the broached one with square ends, each at the 
 The table's two depth columns were the open question: `t4` is the shaft groove and `t2` the hub groove. Verified
 against all 31 rows — `t2 + t4` is always `h` plus 0.2 to 0.3 mm of clearance, and the assignment matches DIN 6885 for
 the 2×2, 3×3 and 8×7 keys.
+
+The key lies in the plane of `at` with its length along local X, so the placement has to turn it onto the shaft. For
+the usual case — a shaft along Z, keyway on the +Y side — that is `direction="-Y", angle=90`. The example in this file
+and in the skill used to leave both out, which is only right for a shaft along X with the keyway facing up; for a Z
+shaft it produced a key lying across the shaft, half of it inside (8.87 mm³). Both examples are fixed.
 
 **G7. O-rings.** ✅ **Done.** `ORing("025", at=...)`, 349 sizes from 001 to 475 and eight cord thicknesses, plus
 `gland()` for the groove. Three tables, not four: a size table and two gland tables (static and dynamic), which is what
@@ -271,7 +281,11 @@ are still open on purpose.
 9. ~~**G1a (roller and angular-contact bearings)**~~ — **done**. It was held back because "no code reads them"; once
    `Bearing` existed, the code did, and the tables were worth copying. The two things that mattered were `T` versus `B`
    for the tapered width and the fact that `a` is not an angle — both in §G1a.
-10. **G12–G14** — only against a concrete model that needs them.
+10. ~~**An assembly, not a part**~~ — **done** (`docs/examples/bearing-block`, `npm run test:assembly`). Every suite up
+   to here measured one part at a time, and a standard part is only right or wrong against the part it goes into. Two
+   things fell out of it: `soma inspect` had no way to see two parts sharing space, and the documented `ShaftKey`
+   example was only correct for a shaft along X.
+11. **G12–G14** — only against a concrete model that needs them.
 
 ### Licensing note
 
@@ -314,9 +328,9 @@ every table** and checks that each one gives exactly one valid solid with the di
 | `RetainingRing` | 174 |
 | `ShaftKey` | 31 |
 | `ORing` | 349 |
-| `Bearing` | 56 |
+| `Bearing` | 100 |
 | `HeatSetInsert` | 143 |
-| **Total** | **1235** |
+| **Total** | **1279** |
 
 Rows it skips are skipped for a stated reason: a row in a shared table that belongs to a different standard (the
 `socket_head_cap_parameters.csv` row is ISO 4762 *or* ASME B18.3, never both), and the imperial rows, which SOMA does
@@ -327,6 +341,17 @@ instead of passing unnoticed.
 The same suite also checks the three lists nobody tests while nobody uses them: `standards()` against the registries,
 every `HINTS` entry against the names that really exist (a hint for a name that resolves can never fire), and every
 `ALIASES` target.
+
+### And do they fit the part they go into?
+
+A part can be a perfect solid with exactly the table's dimensions and still be wrong, because the question a standard
+part answers is "does it fit". `npm run test:assembly` (`app/test/assembly.mjs`) is that level: it builds
+`docs/examples/bearing-block` — a housing, two 6200 bearings, two circlips, a shaft and a key — and measures the
+**pairs**, not the parts, with `soma inspect --overlaps`. Two deliberately wrong copies of the same model prove the
+measurement bites: free-state circlips and an unturned key are both caught with the volume and the depth.
+
+That example is also where the two open items of this document were found, which is the argument for having it: rows
+were covered and standards were covered, and a key could still be modelled lying across its shaft.
 
 ---
 

@@ -1191,13 +1191,20 @@ class RetainingRing(_Part):
     size      shaft or bore diameter in mm, as a number or "20"
     at        seat; the ring lies in the plane of `at` and reaches `thickness` away from the material, like a washer
     direction from the seat into the material, default "-Z"
+    mounted   False (default) is the ring as it comes out of the box, True the ring as it sits in its groove
 
     The diameter of the ring body (d3), its width, the thickness and the gap are the table values, so the ring
     fits the groove it is meant for. The lugs are rectangles with a hole for the pliers: DIN leaves their shape
     to the maker and only draws it.
+
+    d3 is the free diameter and the table always has d3 < d2 (a 10 mm ring: 9.3 free against a 9.6 groove), so a
+    ring in its free state is too small for its own groove: it overlaps the shaft (or the bore) by (d2 - d3) / 2
+    all the way round. That is not a modelling error but how a circlip is made — it is sprung open to be mounted.
+    An assembly that measures interference wants `mounted=True`, which builds the body at d2 instead of d3; the
+    gap then stays as drawn, where in reality it opens by the same (d2 - d3).
     """
 
-    def __init__(self, standard, size=None, *, at=None, direction=None, on=None, angle=0.0):
+    def __init__(self, standard, size=None, *, at=None, direction=None, on=None, angle=0.0, mounted=False):
         standard, size = _split_designation(standard, size)
         self.standard_key = _norm_standard(standard, RETAINING_RINGS, "RetainingRing")
         spec = RETAINING_RINGS[self.standard_key]
@@ -1212,6 +1219,7 @@ class RetainingRing(_Part):
         self.thickness = self.dims["s"]
         self.groove_diameter, self.groove_width = self.dims["d2"], self.dims["m"]
         self.bore = spec["bore"]
+        self.mounted = bool(mounted)
         self._place(at, direction, on, angle, 0.0)
 
     @property
@@ -1220,7 +1228,9 @@ class RetainingRing(_Part):
 
     def _local(self):
         d = self.dims
-        return _clip_local(self.bore, d["d3"], d["a"], d["b"], d["d5"], d["s"])
+        # Montiert liegt der Ring nicht auf d3, sondern im Utor: die Feder wird um (d2 - d3) aufgesprengt
+        free = d["d2"] if self.mounted else d["d3"]
+        return _clip_local(self.bore, free, d["a"], d["b"], d["d5"], d["s"])
 
     def groove(self, oversize=0.0):
         """Tool for cut(): the groove the ring sits in, `groove_width` wide and centred on the ring, floor at
@@ -1246,11 +1256,16 @@ def _key_local(b, h, length, depth):
 
 
 class ShaftKey(_Part):
-    """Parallel key (DIN 6885, form A with rounded ends). ShaftKey("DIN 6885", 20, 40, at=(0, 0, 10)) on a 20 mm
-    shaft, 40 mm long. ShaftKey(20, 40) works too.
+    """Parallel key (DIN 6885, form A with rounded ends). ShaftKey(20, 40, at=...) on a 20 mm shaft, 40 mm long;
+    ShaftKey("DIN 6885", 20, 40, at=...) is the same thing.
 
     The key sits in the shaft keyway: `at` is the point on the shaft surface, the key reaches `shaft_depth` into the
-    shaft and `height - shaft_depth` out of it. `keyway()` cuts the matching groove in the shaft or in the hub.
+    shaft and `height - shaft_depth` out of it. `keyway()` cuts the matching groove in the shaft or in the hub, at the
+    same placement — a key placed wrongly cuts the wrong groove.
+
+    The key lies in the plane of `at` and its length runs along local X, its height along local Z, so the placement
+    has to turn it onto the shaft: for a shaft along Z with the keyway on the +Y side, `at=(0, 5, z)`,
+    `direction="-Y"`, `angle=90`. Without `direction` the default is -Z and the key lies across the shaft.
     """
 
     def __init__(self, standard, size=None, length=None, *, at=None, direction=None, on=None, angle=0.0):

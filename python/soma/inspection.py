@@ -8,12 +8,15 @@ renaming or removing a field bumps the major part.
     soma inspect                      the current model (model.py), per part and in total
     soma inspect --step out.step      a STEP or BREP file, one entry per solid
     soma inspect --json               the document on stdout, nothing else
+    soma inspect --overlaps           also measure which parts cut into each other
 
 The document never contains paths that are not relative to the project, and never a timestamp: two runs on the
 same geometry produce byte-identical output, so it can be diffed in a regression test.
 
 Cost: about the same as `soma export` (the model has to run) plus a few milliseconds per part for volume, area and
 the topology counts. `isValid()` on a large freeform part is the slowest single call and is skipped with --fast.
+`--overlaps` adds a boolean intersection per candidate pair, which is why it is not on by default: a bounding box
+test throws away most pairs, but a model with a hundred overlapping boxes is still a hundred intersections.
 """
 import json
 import math
@@ -22,6 +25,12 @@ from pathlib import Path
 SCHEMA = "soma.inspect/1"
 UNITS = "mm"
 FORMATS = (".step", ".stp", ".brep")
+
+# Ab hier ist eine Schnittmenge kein Rechenrauschen an einer Beruehrflaeche mehr. Dieselben Schwellen wie in
+# soma.anim (animrun.VOL_MIN und die Eindringtiefe): Volumen allein reicht nicht, ein flacher Span entlang einer
+# Auflageflaeche hat viel Volumen und keine Tiefe, eine Nadelspitze umgekehrt.
+OVERLAP_VOLUME = 1e-3    # mm3
+OVERLAP_DEPTH = 0.01     # mm
 
 
 class InspectError(Exception):
@@ -133,11 +142,12 @@ def _part(name, shape, role="part", group=(), step_name=None, fastener=None, fas
     return entry
 
 
-def _checks(parts, fast=False):
+def _checks(parts, fast=False, overlaps=None):
     """Was an der Geometrie messbar falsch ist. `ok` ist nur bei Fehlern falsch, Warnungen sind Hinweise.
 
-    Die Pruefungen sind bewusst billig und deterministisch: keine Interferenz zwischen Bauteilen (das ist
-    `soma analyze clearance`), kein Vergleich gegen eine Erwartung (das macht der Aufrufer).
+    Die Pruefungen sind bewusst billig und deterministisch: keine Interferenz zwischen Bauteilen, solange der
+    Aufrufer sie nicht mit `overlaps` misst (das kostet einen Schnitt pro Paar), kein Vergleich gegen eine
+    Erwartung (das macht der Aufrufer).
     """
     issues = []
 
@@ -178,8 +188,55 @@ def _checks(parts, fast=False):
         else:
             seen[key] = p["name"]
 
+    # Nur wenn der Aufrufer danach gefragt hat (--overlaps): eine Ueberschneidung ist ein Fehler, kein Hinweis.
+    # Zwei Koerper koennen nicht am selben Ort sein: entweder sitzt ein Teil falsch oder die Tasche fehlt, in die
+    # es hineinragt. Ein Presssitz ist im Modell nominal, also null Ueberschneidung.
+    for o in overlaps or ():
+        add("error", "overlap", o["a"],
+            f"cuts {o['thickness']} mm deep into {o['b']!r}, {o['volume']} mm3. Move the part or cut the pocket "
+            "it is meant to sink into")
+
     errors = [i for i in issues if i["level"] == "error"]
     return dict(ok=not errors, issues=issues)
+
+
+def _overlaps(items):
+    """Paare, deren Koerper sich durchdringen: [dict(a, b, volume, thickness)], nach Namen sortiert.
+
+    `items` ist [(Name, Form)]. Die Boxpruefung wirft zuerst alles weg, was sich nicht beruehren kann; erst dann
+    schneidet OCCT. Gemeldet wird nur, was zugleich Volumen und Tiefe hat (OVERLAP_VOLUME, OVERLAP_DEPTH): zwei
+    Bauteile, die sich in einer Flaeche beruehren, haben eine Schnittmenge von ein paar Mikrometern Kubik, und
+    die ist Rechenrauschen, kein Fehler. Die Dicke 2 V / A macht daraus eine Zahl, die man mit einem Spalt
+    vergleichen kann.
+    """
+    boxes = []
+    for name, shape in items:
+        try:
+            b = shape.BoundingBox()
+        except Exception:
+            continue
+        boxes.append((name, shape, (b.xmin, b.ymin, b.zmin), (b.xmax, b.ymax, b.zmax)))
+    found = []
+    for i in range(len(boxes)):
+        na, sa, loa, hia = boxes[i]
+        for j in range(i + 1, len(boxes)):
+            nb, sb, lob, hib = boxes[j]
+            if any(loa[k] > hib[k] or lob[k] > hia[k] for k in range(3)):
+                continue
+            try:
+                common = sa.intersect(sb)
+                volume = common.Volume()
+                area = common.Area()
+            except Exception:
+                continue  # zwei Koerper, die OCCT nicht schneiden kann: das ist ein Fall fuer isValid, nicht hier
+            if volume <= OVERLAP_VOLUME:
+                continue
+            thickness = 2 * volume / area if area > 1e-9 else 0.0
+            if thickness <= OVERLAP_DEPTH:
+                continue
+            found.append(dict(a=na, b=nb, volume=_r(volume, 4), thickness=_r(thickness, 4)))
+    found.sort(key=lambda o: (o["a"], o["b"]))
+    return found
 
 
 def _totals(parts):
@@ -198,8 +255,11 @@ def _totals(parts):
     return t
 
 
-def _document(source, parts, fast=False, density=None):
-    """Das Dokument. Reihenfolge der Schluessel ist fest: so ist die Ausgabe zwischen zwei Laeufen vergleichbar."""
+def _document(source, parts, fast=False, density=None, items=None):
+    """Das Dokument. Reihenfolge der Schluessel ist fest: so ist die Ausgabe zwischen zwei Laeufen vergleichbar.
+
+    `items` ist [(Name, Form)] und nur gesetzt, wenn der Aufrufer die Ueberschneidungen messen will.
+    """
     from . import __version__
     doc = dict(schema=SCHEMA, soma=__version__, units=UNITS, source=source,
                bounds=_union_box([p["bounds"] for p in parts]), totals=_totals(parts))
@@ -208,14 +268,16 @@ def _document(source, parts, fast=False, density=None):
         doc["totals"]["mass_g"] = _r(total * density / 1000.0, 4) if total is not None else None
         doc["totals"]["density_g_cm3"] = density
     doc["parts"] = parts
-    doc["checks"] = _checks(parts, fast)
+    if items is not None:
+        doc["overlaps"] = _overlaps(items)
+    doc["checks"] = _checks(parts, fast, doc.get("overlaps"))
     doc["ok"] = doc["checks"]["ok"]
     return doc
 
 
 # --- Modell -------------------------------------------------------------------------------------------------------------
 
-def from_model(project, entry=None, only=None, fast=False, density=None):
+def from_model(project, entry=None, only=None, fast=False, density=None, overlaps=False):
     """Das Modell ausfuehren und messen. Aendert nichts im Projekt: `run_model` schreibt keine Dateien."""
     from . import build, params
     root = Path(project).resolve()
@@ -234,7 +296,10 @@ def from_model(project, entry=None, only=None, fast=False, density=None):
                    step_name=p.get("step_name"), fastener=p.get("fastener"), fast=fast) for p in built]
     source = dict(kind="model", project=root.name,
                   entry=str(entry or build.read_project_json(root).get("entry") or build.DEFAULT_ENTRY))
-    doc = _document(source, parts, fast, density)
+    # Referenzteile sind mitgebracht (eine Flaeche zum Messen, ein Gehaeuse aus einer anderen Baugruppe): dass sie
+    # sich mit dem Modell schneiden, ist gewollt und keine Kollision.
+    items = [(p["name"], p["shape"]) for p in built if p.get("role") != "reference"] if overlaps else None
+    doc = _document(source, parts, fast, density, items)
     doc["source"]["parameters"] = [dict(name=s["name"], value=s.get("value"), source=s.get("source"),
                                         unit=s.get("unit"), group=s.get("group"))
                                    for s in params.PARAMS]
@@ -290,7 +355,7 @@ def _step_solids(path):
     return [(n or f"Solid {i + 1}", s) for i, (n, s) in enumerate(items)]
 
 
-def from_file(path, fast=False, density=None):
+def from_file(path, fast=False, density=None, overlaps=False):
     """Eine STEP- oder BREP-Datei messen. Gedacht zum Pruefen eines Exports: dieselben Zahlen wie am Modell, aber
     aus der Datei gelesen, also nach der Uebergabe an ein anderes Programm."""
     import cadquery as cq
@@ -310,7 +375,8 @@ def from_file(path, fast=False, density=None):
     else:
         items = _step_solids(p)
     parts = [_part(name, shape, fast=fast) for name, shape in items]
-    return _document(dict(kind="file", file=p.name, format=suffix.lstrip(".")), parts, fast, density)
+    return _document(dict(kind="file", file=p.name, format=suffix.lstrip(".")), parts, fast, density,
+                     items if overlaps else None)
 
 
 # --- Ausgabe ------------------------------------------------------------------------------------------------------------
@@ -345,6 +411,10 @@ def text(doc):
                      f"{p['topology']['solids']:>7} {valid:>6}")
     issues = doc["checks"]["issues"]
     lines.append("")
+    if "overlaps" in doc:
+        # Ohne diese Zeile sieht "Checks: ok" genauso aus wie ein Lauf, der gar nicht nach Ueberschneidungen gefragt hat
+        n = len(doc["overlaps"])
+        lines.append("Overlaps: none" if not n else f"Overlaps: {n} pair(s)")
     if not issues:
         lines.append("Checks: ok")
     else:

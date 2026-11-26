@@ -76,6 +76,19 @@ soma inspect --step exports/<name>.step --json --out export.json
 `totals.solids`, `totals.volume` and `bounds.size` must match. If they do not, bodies were lost or merged on the way
 out — usually a part that was a shell instead of a solid (`topology.solids` 0).
 
+**A part that is valid on its own can still be in the wrong place.** `soma inspect` measures each part; add
+`--overlaps` and it also measures every pair:
+
+```bash
+soma inspect --overlaps            # Overlaps: none
+soma inspect --overlaps --strict   # exit code 1 when two parts share space
+```
+
+A reported pair is a part that was placed where another part already is, or a pocket that was never cut. Both are the
+usual mistakes in an assembly, and neither shows up in a picture. Two overlaps are not defects: a press fit is nominal
+in the model (so it overlaps by nothing) and a circlip in its free state is smaller than its own groove — for that one
+use `RetainingRing(..., mounted=True)`.
+
 ## Foreign STEP files
 
 `import_assembly("inputs/board.step")` keeps the parts with their names and colours, sub-assemblies as groups. Things

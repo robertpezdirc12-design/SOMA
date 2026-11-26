@@ -133,6 +133,18 @@ try {
   check('soma_inspect: Textfassung als content, damit auch ein Agent ohne structuredContent etwas hat',
     /Volume\s+[\d.]+ mm³/.test(ins.result?.content?.[0]?.text ?? ''), (ins.result?.content?.[0]?.text ?? '').slice(0, 60));
 
+  // 4a) overlaps=true: der Agent sieht, ob zwei Teile sich durchdringen. Dieses Testmodell ist absichtlich grob — der
+  // Deckel hat keine Löcher und die Mutter sitzt im vollen Blech —, also findet die Messung genau die drei Zukaufteile.
+  const ovl = await client.request('tools/call', { name: 'soma_inspect', arguments: { overlaps: true } });
+  const ovlDoc = ovl.result?.structuredContent;
+  const ovlPairs = (ovlDoc?.overlaps ?? []).map((o) => [o.a, o.b].sort().join('/'));
+  check('soma_inspect mit overlaps=true: ein Paar je Zukaufteil, ok ist false',
+    ovl.result?.isError === false && ovlPairs.length === 3
+    && ['Nut', 'Screw 1', 'Screw 2'].every((n) => ovlPairs.some((p) => p.split('/').includes(n)))
+    && ovlDoc.ok === false && /Overlaps: 3 pair/.test(ovl.result?.content?.[0]?.text ?? '')
+    && !('overlaps' in doc),
+    `${ovlPairs.join(', ')} / ok ${ovlDoc?.ok}`);
+
   // 4b) Kosovnica: gekaufte Teile nach Oznaka, eigene mit Volumen
   const bm = await client.request('tools/call', { name: 'soma_bom', arguments: { density: 1.24 } });
   const bomDoc = bm.result?.structuredContent;

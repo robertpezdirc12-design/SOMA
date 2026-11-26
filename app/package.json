@@ -46,6 +46,7 @@
     "test:hardware": "node test/hardware.mjs",
     "test:tables": "node test/tables.mjs",
     "test:handoff": "node test/handoff.mjs",
+    "test:assembly": "node test/assembly.mjs",
     "help:shots": "npm run build && node test/helpshots.mjs",
     "dist": "npm run build && electron-builder --config electron-builder.config.cjs --publish never",
     "dist:dir": "npm run build && electron-builder --config electron-builder.config.cjs --publish never --dir",
