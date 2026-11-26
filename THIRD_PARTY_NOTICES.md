@@ -29,7 +29,7 @@ Paths are relative to the installation folder (macOS: `SOMA.app/Contents`, where
 | Python packages | `resources/python/.../site-packages/<package>.dist-info/` (`LICENSE*`, `licenses/`), some inside the package folder |
 | gmsh | `resources/python/share/doc/gmsh/LICENSE.txt` |
 | CalculiX and its libraries | `resources/python/ccx/licenses/<package>/` |
-| Fastener tables | `resources/python/.../site-packages/soma/data/fasteners/LICENSE-bd_warehouse.txt` |
+| Fastener and bearing tables | `resources/python/.../site-packages/soma/data/fasteners/LICENSE-bd_warehouse.txt` |
 
 ## Source code
 
@@ -172,7 +172,7 @@ wheels bundle where relevant.
 | pdf.js standard fonts: Liberation fonts | as in pdfjs-dist 6.4.299 | OFL-1.1 | https://github.com/liberationfonts | yes |
 | pdf.js character maps (cmaps) | as in pdfjs-dist 6.4.299 | BSD-3-Clause (Adobe) | https://github.com/adobe-type-tools/cmap-resources | yes |
 | pdf.js decoders: OpenJPEG, JBIG2 (PDFium), qcms, QuickJS (WebAssembly) | as in pdfjs-dist 6.4.299 | BSD-2-Clause, BSD-3-Clause, MIT | https://github.com/mozilla/pdf.js | yes |
-| Fastener dimension tables (from bd_warehouse) | 0.3.0, commit eed2da1 | Apache-2.0 | https://github.com/gumyr/bd_warehouse | yes |
+| Fastener and bearing dimension tables (from bd_warehouse) | 0.3.0, commit eed2da1 | Apache-2.0 | https://github.com/gumyr/bd_warehouse | yes |
 
 "As CadQuery script" copies the fastener tables into exported scripts that use standard parts, with a note on their
 origin and license. The compatibility code around them (`python/soma/cqruntime.py`, `python/soma/fasteners.py`) is

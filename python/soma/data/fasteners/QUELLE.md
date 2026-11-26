@@ -23,6 +23,8 @@ Verwendet von `soma/fasteners.py`. Der Code dort ist eigener Code und übernimmt
 | `nominal_screw_lengths.csv` | Normlängen je Schraubennorm |
 | `heatset_nut_parameters.csv` | Gewindeeinsätze von ruthex, CNC Kitchen, McMaster-Carr, Hilitchi, AE-SamZhihui |
 | `drill_sizes.csv` | Zollbohrer (Nummern und Buchstaben) für die Bohrungen der Gewindeeinsätze |
+| `single_row_deep_groove_ball_bearing_parameters.csv` | Rillenkugellager, offen (623, 604, 608, 6000, 6200, 6300 …) |
+| `single_row_capped_deep_groove_ball_bearing_parameters.csv` | Rillenkugellager, gedeckelt oder gedichtet (-2Z, -2RS1, -2RZ) |
 
 Bekannte Eigenheiten der Daten:
 
@@ -33,3 +35,15 @@ Bekannte Eigenheiten der Daten:
   lehnt diese Einsätze mit einer Meldung ab.
 - Bei ISO 4035 M3 steht die Zeile unter der Steigung 0,45 statt 0,5. `soma` nimmt dann die vorhandene Zeile, denn ohne
   Gewinde zählt nur der Durchmesser.
+
+Eigenheiten der Lagertabellen, die den Code bestimmen:
+
+- `d1` und `D1` bedeuten in den beiden Tabellen nicht dasselbe. Bei den offenen Lagern ist `D1 - d1` immer kleiner als
+  die Breite (brauchbar als Schulterabstand), bei den gedeckelten in 16 von 26 Zeilen größer — dort sind es die
+  Dichtsitze. Aus diesen Spalten lässt sich der Kugeldurchmesser also nicht ableiten; `_bearing_local` rechnet die
+  Ringe deshalb aus dem radialen Platz und die Kugeln aus der Breite. Gezeichnet ist damit die Hülle, nicht das Innere.
+- Eine Zeile der gedeckelten Tabelle hat keine Bezeichnung (Zeile 8). `_bearing_index` überspringt sie.
+- Mehrere gedeckelte Lager heißen anders, als man sie bestellt: die Tabelle führt `E2.608-2Z` (SKF Energy Efficient),
+  nicht `608-2Z`. `Bearing` rät nicht, sondern schlägt die ähnlichste Bezeichnung vor.
+- Die Tabelle führt die Masse in kg; `Bearing.mass_g` gibt sie in Gramm. Das ist der einzige Wert am Lager, der das
+  gezeichnete Volumen nicht braucht — und deshalb der, den eine Kosovnica zeigen sollte.

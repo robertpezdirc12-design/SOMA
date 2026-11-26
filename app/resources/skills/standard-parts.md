@@ -1,7 +1,7 @@
 ---
 title: Standard parts
 name: Standard parts
-summary: Screws, nuts, washers and threaded inserts from soma.fasteners with matching holes, nut traps, sizes of ball bearings, dowel pins and aluminium extrusions.
+summary: Screws, nuts, washers, threaded inserts and deep-groove ball bearings from soma.fasteners with matching holes, nut traps, seats, dowel pins and aluminium extrusions.
 order: 22
 category: Design knowledge
 default: always
@@ -54,12 +54,29 @@ add_part("Screw 1", s, group="Hardware")               # role "hardware" automat
 slot_length=…` the nut slides in from the side. At `angle=0` two flats are parallel to X, so a slot along X is exactly
 as wide as the nut. For a slot along Y use `angle=30`.
 
-## Ball bearings (d × D × width)
+## Bearings: `Bearing(designation, at=...)`
 
-- 623: 3 × 10 × 4, 624: 4 × 13 × 5, 625: 5 × 16 × 5, 626: 6 × 19 × 6, 608: 8 × 22 × 7, 688: 8 × 16 × 5.
-- 6000: 10 × 26 × 8, 6001: 12 × 28 × 8, 6002: 15 × 32 × 9, 6200: 10 × 30 × 9, 6201: 12 × 32 × 10.
-- Shoulders: on the shaft about d + 0.2 × (D − d), in the housing about D − 0.2 × (D − d).
-- Machined seats: housing H7, shaft k6. Printed seats: start with D and adjust after a test print.
+Never model a bearing by hand when the number is in the library:
+
+```python
+from soma.fasteners import Bearing
+
+b = Bearing("608", at=(0, 0, SEAT_Z))       # one face rests at `at`, width B goes outward
+add_part("Bearing 1", b, group="Hardware")   # role "hardware" automatically
+```
+
+- Covers bores from 3 to 10 mm: 604, 607, 608, 609, 623–629, 618/4–618/9, 619/4–619/9, 61800, 61900, 6000, 6200,
+  6300, and the capped variants `623-2Z`, `E2.608-2Z`, `630/8-2RS1`, `638-2RZ` and so on. `Bearing(...)` with a
+  number that is not there says which ones are.
+- **Not** in the library: 6001, 6002, 6201, 688, anything above 10 mm bore, and all roller and angular-contact
+  bearings. For those: ask for a STEP file, or model the envelope (two rings, or one ring) and say that it is one.
+- `b.bore`, `b.diameter`, `b.width` are the catalogue values; `b.mass_g` is the real mass. The rings and balls in
+  between are drawn to a rule, so the volume from `soma inspect` is smaller than the real part — for a parts list use
+  `b.mass_g`, not volume × density.
+- Capped or sealed (`-2Z`, `-2RS1`) is not a detail to drop: it changes the width and it is what the part is called.
+  `b.capped` says which one you have.
+- Seats: housing H7, shaft k6 when machined. Printed seats: start with `D` and adjust after a test print. Shoulders:
+  on the shaft about `d + 0.2 × (D − d)`, in the housing about `D − 0.2 × (D − d)`.
 
 ## Pins and profiles
 
@@ -70,12 +87,12 @@ as wide as the nut. For a slot along Y use `angle=30`.
 ## What the library covers, and what it does not
 
 Covered: screws ISO 4762, 7380, 10642, 4017, 4014, DIN 931, 4026; nuts ISO 4032, 4033, 4035, DIN 557; washers ISO
-7089, 7091, 7093; heat-set inserts from five makers; the clearance holes, tap drills, counterbores, nut traps and
-insert holes that go with them. Nothing else.
+7089, 7091, 7093; heat-set inserts from five makers; deep-groove ball bearings from 3 to 10 mm bore, open and capped;
+the clearance holes, tap drills, counterbores, nut traps and insert holes that go with them. Nothing else.
 
-Not covered, model by hand (with `role="hardware"`): ball bearings, dowel pins, retaining rings, shaft keys, O-rings,
-gears, sprockets, pulleys, springs, low-profile and shoulder screws, flange and cap nuts, imperial fasteners. Ask
-before inventing dimensions; the sizes in this skill are a starting point, not a catalogue.
+Not covered, model by hand (with `role="hardware"`): roller and angular-contact bearings, dowel pins, retaining rings,
+shaft keys, O-rings, gears, sprockets, pulleys, springs, low-profile and shoulder screws, flange and cap nuts, imperial
+fasteners. Ask before inventing dimensions; the sizes in this skill are a starting point, not a catalogue.
 
 Three simplifications to know about:
 

@@ -50,11 +50,11 @@ hole it needs come from the same table row, so they cannot drift apart.
 
 ### 1.3 Data tables
 
-13 of the 48 files in `bd_warehouse/src/bd_warehouse/data/` are present.
+15 of the 42 files in `bd_warehouse/src/bd_warehouse/data/` are present.
 
 | Present | Not present (relevant) |
 |---|---|
-| `button_head_parameters.csv`, `clearance_hole_sizes.csv`, `countersunk_head_parameters.csv`, `drill_sizes.csv`, `heatset_nut_parameters.csv`, `hex_head_parameters.csv`, `hex_nut_parameters.csv`, `nominal_screw_lengths.csv`, `plain_washer_parameters.csv`, `setscrew_parameters.csv`, `socket_head_cap_parameters.csv`, `square_nut_parameters.csv`, `tap_hole_sizes.csv` | `pan_head_parameters.csv`, `cheese_head_parameters.csv`, `low_profile_parameters.csv`, `shoulder_screw.csv`, `hex_head_with_flange_parameters.csv`, `hex_nut_with_flange_parameters.csv`, `domed_cap_nut_parameters.csv`, `brad_tee_nut_parameters.csv`, `chamfered_washer_parameters.csv`, `internal_tooth_lock_washer_parameters.csv`, `din471.csv`, `din472.csv`, `shaft_key_parameters.csv`, `o-ring_parameters.csv`, `single_row_deep_groove_ball_bearing_parameters.csv` (+3 bearing tables), `imperial_set_screw_parameters.csv`, `metric_set_screw_parameters.csv` |
+| `button_head_parameters.csv`, `clearance_hole_sizes.csv`, `countersunk_head_parameters.csv`, `drill_sizes.csv`, `heatset_nut_parameters.csv`, `hex_head_parameters.csv`, `hex_nut_parameters.csv`, `nominal_screw_lengths.csv`, `plain_washer_parameters.csv`, `setscrew_parameters.csv`, `socket_head_cap_parameters.csv`, `square_nut_parameters.csv`, `tap_hole_sizes.csv`, `single_row_deep_groove_ball_bearing_parameters.csv`, `single_row_capped_deep_groove_ball_bearing_parameters.csv` | `pan_head_parameters.csv`, `cheese_head_parameters.csv`, `low_profile_parameters.csv`, `shoulder_screw.csv`, `hex_head_with_flange_parameters.csv`, `hex_nut_with_flange_parameters.csv`, `domed_cap_nut_parameters.csv`, `brad_tee_nut_parameters.csv`, `chamfered_washer_parameters.csv`, `internal_tooth_lock_washer_parameters.csv`, `din471.csv`, `din472.csv`, `shaft_key_parameters.csv`, `o-ring_parameters.csv`, `single_row_angular_contact_ball_bearing_parameters.csv`, `single_row_cylindrical_roller_bearing_parameters.csv`, `single_row_tapered_roller_bearing_parameters.csv`, `imperial_set_screw_parameters.csv`, `metric_set_screw_parameters.csv` |
 
 `drill_sizes.csv` is present but only used to resolve heat-set insert holes (`_drill_mm`).
 
@@ -68,9 +68,17 @@ Ordered by how often a mechanical design actually needs the part, not by how eas
 
 ### P1 — blocks ordinary work
 
-**G1. Bearings: nothing at all.** `bd_warehouse.bearing` covers deep-groove, angular-contact, cylindrical-roller
-and tapered-roller bearings, plus the four tables. A 608-2RS or a 6001 is the second most common purchased part
-after screws, and today the user has to model it by hand or import a STEP. This is the single largest hole.
+**G1. Bearings: nothing at all.** ✅ **Done** — `Bearing` in `soma.fasteners` (see §5). A 608-2RS or a 6001 is the
+second most common purchased part after screws, and it had to be modelled by hand or imported as STEP. Now:
+`Bearing("608", at=(0, 0, 6))`, 56 catalogue numbers, one body each, bore and outside diameter exact, catalogue mass.
+What it does not do: bores above 10 mm (the tables stop at the 6000/6200/6300 sizes), angular-contact and roller
+bearings (tables not copied — see G1a), and chamfers.
+
+**G1a. Roller and angular-contact bearings.** `single_row_cylindrical_roller_bearing_parameters.csv`,
+`single_row_tapered_roller_bearing_parameters.csv` and `single_row_angular_contact_ball_bearing_parameters.csv` exist
+upstream and were deliberately **not** copied: no code reads them, and a CSV in `data/` that nothing reads is the exact
+failure this inventory warns about in §4. Adding them means rollers (cylinders and cones) instead of balls and, for the
+tapered ones, a cone angle from `SKT:a`. Do it when a model needs one, not before.
 
 **G2. No bill of materials.** ✅ **Done** — `soma bom` (see `docs/BOM.md`). `HeatSetInsert` stores `part_number`
 (`fasteners.py:835`), and `registry.py` marks standard parts with `role="hardware"`; nothing read either, and
@@ -151,12 +159,14 @@ This is worth stating once in the `standard-parts` skill so agents stop "improvi
 | "Do not duplicate functionality" | Confirmed: importing `cq_warehouse` would duplicate all four classes. |
 | Runtime change | **None needed.** New families are new modules in `python/soma/`, reading new CSVs from the same `data/fasteners/` folder under the same Apache-2.0 notice. No new pip dependency. |
 
-Status: G2 is implemented (`soma bom`). G1 and the rest are open, in the order above.
+Status: G2 and G1 are implemented (`soma bom`, `Bearing`). The rest are open, in the order above.
 
 ### Recommended order
 
 1. ~~**G2 (BOM)**~~ — **done** (`soma bom`). It was the smallest change and it unlocked every purchasing workflow.
-2. **G1 (bearings)** — largest missing family, one new module + four tables.
+2. ~~**G1 (bearings)**~~ — **done** (`Bearing`). It was **not** "one new module + four tables" as written here first:
+   it became one class in `fasteners.py` and **two** tables. Reasons in §5 — the export path and the data itself both
+   decided that, not taste.
 3. **G3, G5, G6** — fixture and shaft work; each is one table plus one geometry branch.
 4. **G7, G8, G9, G10, G11** — consistency and correctness of what already exists.
 5. **G12–G14** — only against a concrete model that needs them.
@@ -186,3 +196,44 @@ grep -o '"[a-z_0-9]*\.csv"' python/soma/fasteners.py | sort -u
 ```
 
 The last command is the one to trust: a CSV can sit in `data/` and be read by nothing.
+
+---
+
+## 5. Bearings: what was decided
+
+**No new module.** `Bearing` lives in `fasteners.py`, although a bearing is not a fastener. The reason is
+"Export as CadQuery": `cqexport.py` embeds exactly **one** module — it reads `fasteners.py` as text, executes it into a
+synthetic module, and copies every CSV from `data/fasteners/` into `_EMBEDDED`. That mechanism assumes a single
+self-contained file with no relative imports. A separate `bearings.py` would have forced the export path to generalise
+to two modules, which is a rewrite of a working feature and a much bigger change than the part family itself. One
+class in `fasteners.py` reuses `_Part`, `_table`, `_cyl` and `_ring_local` unchanged and needed a single entry in
+`cqexport.FASTENERS`.
+
+The cost is a naming wart: `from soma.fasteners import Bearing`. It is recorded here rather than hidden, and renaming
+`soma.fasteners` is not an option — it is public API in every model already written.
+
+**Two tables, not four.** Angular-contact and roller bearings were dropped from the copy (G1a) because nothing reads
+them yet. The two that stayed are the ones `Bearing` reads, which is the rule §4 states.
+
+**What is exact and what is derived.** The data forced this split: `d1`/`D1` mean different things in the two tables,
+so the ball diameter cannot be derived from them (details in `QUELLE.md` next to the tables).
+
+| Value | Source |
+|---|---|
+| Bore `d`, outside diameter `D`, width `B` | table, exact — this is what a shaft and a housing touch |
+| Chamfer `r12` | table, reported as `chamfer`, **not** modelled |
+| Mass | table (`SKT:mass`, kg), exposed as `mass_g` |
+| Ring wall thickness | derived from the radial space |
+| Ball diameter and count | derived from the width (0.55 × B) and the pitch circle |
+
+So the envelope is a catalogue part and the inside is a drawing of one. Two consequences worth knowing: the modelled
+volume is smaller than the real part (the balls do not fill the raceway), and the catalogue mass is therefore the only
+correct weight — which is why `mass_g` comes from the table and not from volume × density. A parts list should show
+that number.
+
+**One body per bearing.** The balls overlap both rings by 2 %, so the part is a single solid and `soma inspect` does not
+report `multiple_bodies` for a purchased part that is fine.
+
+**Test:** `app/test/bearings.mjs` — 15 checks, including all 56 designations against their table rows, one body and a
+free bore for ten of them, the capped variants, the error that suggests `E2.608-2Z`, and that a model with two 608s
+gives one BOM line with count 2.

@@ -22,7 +22,7 @@ from . import __version__, params
 from .build import DEFAULT_ENTRY, read_project_json
 
 CORE = ("add_part", "param", "import_step", "import_assembly")
-FASTENERS = ("Screw", "Nut", "Washer", "HeatSetInsert", "lengths", "pick_length", "standards")  # = fasteners.__all__
+FASTENERS = ("Screw", "Nut", "Washer", "HeatSetInsert", "Bearing", "lengths", "pick_length", "standards")  # = fasteners.__all__
 MARK = "# soma-import: "
 BLOCK_START = "# >>> soma-compat"
 BLOCK_END = "# <<< soma-compat"

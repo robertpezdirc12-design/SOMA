@@ -1,6 +1,7 @@
 # SPDX-License-Identifier: GPL-3.0-or-later OR Apache-2.0
 # Zusaetzlich Apache 2.0 (E101): "Export as CadQuery" kopiert dieses Modul in das Skript des Nutzers.
-"""Standard parts: screws, nuts, washers and heat-set inserts, simplified without threads, with matching holes.
+"""Standard parts: screws, nuts, washers, heat-set inserts and rolling bearings, simplified without threads, with
+matching holes.
 
     from soma import add_part
     from soma.fasteners import Screw
@@ -10,8 +11,8 @@
     add_part("Screw 1", s)                            # role "hardware" (purchased part), not in export --all
 
 Placement, the same for all parts: `at` is the point on the axis where the part rests. `direction` points from there
-into the material (default "-Z": from top to bottom). A screw rests with the underside of its head, a nut or washer
-with one of its faces. Countersunk screws, set screws and heat-set inserts end flush with their top at `at`.
+into the material (default "-Z": from top to bottom). A screw rests with the underside of its head, a nut, washer or
+bearing with one of its faces. Countersunk screws, set screws and heat-set inserts end flush with their top at `at`.
 `sunk=True` sinks the head, nut or washer flush (its outer side is then at `at`), `sunk=0.5` 0.5 mm deeper.
 `on=part` finds the seat itself: the line through `at` in direction `direction` hits the part, the first hit counts
 (with "-Z" only x and y of `at` matter). `rotate()`, `translate()` and `moved()` work as on CadQuery shapes and
@@ -19,9 +20,15 @@ return a moved copy, for example so that a screw moves with its part into anothe
 
 Dimensions come from the tables of bd_warehouse (Apache 2.0, see data/fasteners/QUELLE.md), partly nominal, partly
 maximum values. Threads are not modelled: the shank and the bore of the nut have the nominal diameter.
+
+A bearing is the one part here whose inside is not measured: bore, outside diameter and width come from the table, the
+rings and balls in between are drawn to a rule (see `Bearing`). It is a purchased part that has to sit in a hole and on
+a shaft, not a bearing to be manufactured, so the envelope is what counts and the catalogue mass is what a parts list
+should show.
 """
 import copy
 import csv
+import difflib
 import functools
 import io
 import math
@@ -33,7 +40,7 @@ import cadquery as cq
 from OCP.BRepIntCurveSurface import BRepIntCurveSurface_Inter
 from OCP.gp import gp_Ax1, gp_Dir, gp_Lin, gp_Pnt, gp_Trsf
 
-__all__ = ["Screw", "Nut", "Washer", "HeatSetInsert", "lengths", "pick_length", "standards"]
+__all__ = ["Screw", "Nut", "Washer", "HeatSetInsert", "Bearing", "lengths", "pick_length", "standards"]
 
 _DATA = Path(__file__).parent / "data" / "fasteners"
 # Tabellen als Text (Dateiname -> CSV). Fuellt nur der Block von "Export as CadQuery" (cqexport.py), dann laeuft dieses
@@ -86,6 +93,14 @@ WASHERS = {
 }
 INSERT_BRANDS = {"ruthex": "ruthex", "cnckitchen": "CNCKitchen", "mcmaster": "McMaster-Carr", "mcmastercarr": "McMaster-Carr",
                  "hilitchi": "Hilitchi", "aesamzhihui": "AE-SamZhihui"}
+BEARINGS = {
+    "deepgroove": dict(name="Deep groove ball bearing", title="Deep groove ball bearing, open",
+                       table="single_row_deep_groove_ball_bearing_parameters.csv"),
+    "capped": dict(name="Capped deep groove ball bearing", title="Deep groove ball bearing, capped or sealed",
+                   table="single_row_capped_deep_groove_ball_bearing_parameters.csv"),
+}
+BEARING_FAMILIES = {"open": "deepgroove", "deepgrooveballbearing": "deepgroove", "2z": "capped", "2rz": "capped",
+                    "2rs": "capped", "2rs1": "capped", "sealed": "capped", "shielded": "capped", "capped": "capped"}
 ALIASES = {"iso73801": "iso7380"}
 # Alte DIN-Bezeichnungen: melden statt still umdeuten, weil manche Masse abweichen
 HINTS = {
@@ -241,12 +256,13 @@ def pick_length(standard, size, min_length, max_length=None):
 
 def standards():
     """What is available: {"screws": {"ISO 4762": "Socket head cap screw", ...}, "nuts": ..., "washers": ...,
-    "heat_set_inserts": [brands]}."""
+    "heat_set_inserts": [brands], "bearings": {"Deep groove ball bearing": ..., ...}}."""
     return {
         "screws": {v["name"]: v["title"] for v in SCREWS.values()},
         "nuts": {v["name"]: v["title"] for v in NUTS.values()},
         "washers": {v["name"]: v["title"] for v in WASHERS.values()},
         "heat_set_inserts": sorted(set(INSERT_BRANDS.values())),
+        "bearings": {v["name"]: v["title"] for v in BEARINGS.values()},
     }
 
 
@@ -856,3 +872,122 @@ class HeatSetInsert(_Part):
         """Tool for cut(): hole for the insert as the manufacturer specifies, `extra_depth` mm deeper than the insert is
         long (room for displaced plastic), `oversize` added to the diameter."""
         return self._world(_cyl(self.hole_diameter + oversize, -(self.length + extra_depth), self._zs + MARGIN))
+
+
+# --- Waelzlager --------------------------------------------------------------------------------------------------------
+
+_BEARING_MARK = re.compile(r"^[*\s]+")
+
+
+@functools.cache
+def _bearing_index():
+    """Bezeichnung -> [(Familie, Zeile)]. Zeilen ohne Bezeichnung und die Striche der Tabellen fallen weg."""
+    out = {}
+    for key, spec in BEARINGS.items():
+        for _, row in _table(spec["table"]):
+            name = _BEARING_MARK.sub("", row.get("SKT:Designation", "")).strip()
+            if not name or name in ("-", "\u2013", "\u2014"):
+                continue
+            out.setdefault(name, []).append((key, row))
+    return out
+
+
+def _bnum(row, col):
+    """Zahl aus einer Spalte der Lagertabelle, None wenn dort ein Strich oder nichts steht."""
+    try:
+        return _num(row.get(f"SKT:{col}", "").strip())
+    except ValueError:
+        return None
+
+
+def _bearing_family(family):
+    key = re.sub(r"[\s_.-]", "", str(family).lower())
+    key = BEARING_FAMILIES.get(key, key)
+    if key not in BEARINGS:
+        raise ValueError("Bearing: family is " + " or ".join(repr(v["name"]) for v in BEARINGS.values())
+                         + f", not {family!r}")
+    return key
+
+
+@functools.cache
+def _bearing_local(d, D, B, capped):
+    """Lager um die Achse, von z = 0 bis z = B.
+
+    Ringe und Kugeln nach einer Regel, nicht nach Katalog: die Tabelle fuehrt d1 und D1 (Schulterdurchmesser), aber
+    die beiden Tabellen meinen damit Verschiedenes — bei den gedeckelten Lagern ist D1 - d1 groesser als die Breite,
+    ein Lager ginge also nicht auf. Deshalb: Wandstaerke aus dem radialen Platz, Kugeln mit 0,55 x Breite, Anzahl aus
+    dem Teilkreis. Die Kugeln ueberlappen beide Ringe um 2 % und machen das Lager damit zu einem Koerper.
+    """
+    space = (D - d) / 2
+    ball = min(0.55 * B, 0.8 * space)
+    wall = max((space - ball) / 2, 0.15 * space)
+    inner = _one(_cyl(d + 2 * wall, 0, B).cut(_cyl(d, -0.01, B + 0.01)))
+    outer = _one(_cyl(D, 0, B).cut(_cyl(D - 2 * wall, -0.01, B + 0.01)))
+    pitch = (d + D) / 2
+    count = max(6, min(14, int(math.pi * pitch / (1.3 * ball))))
+    r = 0.52 * ball
+    balls = cq.Compound.makeCompound([
+        cq.Solid.makeSphere(r, cq.Vector(pitch / 2 * math.cos(2 * math.pi * i / count),
+                                         pitch / 2 * math.sin(2 * math.pi * i / count), B / 2))
+        for i in range(count)])
+    parts = [inner, outer, balls]
+    if capped:
+        t = min(0.3, 0.1 * B)
+        for z in (0.0, B - t):
+            seal = _ring_local(d + 2 * wall - 0.1, D - 2 * wall + 0.1, t)
+            parts.append(seal.moved(cq.Location(cq.Vector(0, 0, z))))
+    return _one(parts[0].fuse(*parts[1:]))
+
+
+class Bearing(_Part):
+    """Rolling bearing. Bearing("608", at=(x, y, z)): one face rests at `at` and the part extends away from the
+    material by its width, like a washer.
+
+    designation  catalogue number: "608", "6000", "6200", "6300", "623", "624" (open), "608-2Z", "623-2Z", "6300-2RS1"
+                 (capped or sealed). The tables cover bores from 3 to 10 mm, which is the range small mechanisms use
+    family       only needed when a number sits in both tables: "deep groove" (open) or "capped"
+
+    Bore, outside diameter, width, chamfer and mass are the catalogue values; `mass_kg` is what the part really weighs.
+    The rings and balls in between follow a rule, not a catalogue drawing — see `_bearing_local`. Chamfers are not
+    modelled, `chamfer` is the table value for the corner of a housing.
+    """
+
+    def __init__(self, designation, *, family=None, at=None, direction=None, on=None, sunk=False, angle=0.0):
+        if not isinstance(designation, str) or not designation.strip():
+            raise ValueError("Bearing: give the catalogue number as text, e.g. \"608\" or \"608-2Z\"")
+        name = designation.strip()
+        hits = _bearing_index().get(name, [])
+        if family is not None:
+            key = _bearing_family(family)
+            hits = [h for h in hits if h[0] == key]
+        if not hits:
+            known = sorted(_bearing_index())
+            close = difflib.get_close_matches(name, known, n=3, cutoff=0.6)
+            hint = (" Did you mean " + " or ".join(repr(c) for c in close) + "?") if close else ""
+            raise ValueError(f"Bearing: there is no bearing {name!r} here.{hint} Available: " + ", ".join(known))
+        if len(hits) > 1:
+            raise ValueError(f"Bearing: {name!r} is in both tables; give family=\"deep groove\" or family=\"capped\"")
+        key, row = hits[0]
+        self.standard = BEARINGS[key]["name"]
+        self.designation = name
+        self.capped = key == "capped"
+        self.bore, self.diameter, self.width = _bnum(row, "d"), _bnum(row, "D"), _bnum(row, "B")
+        if None in (self.bore, self.diameter, self.width):
+            raise ValueError(f"Bearing: the table has no usable bore, outside diameter or width for {name!r}")
+        self.chamfer = _bnum(row, "r12")
+        self.mass_kg = _bnum(row, "mass")
+        sink = _sink(sunk, "Bearing")
+        self.sunk = sink is not None
+        self._place(at, direction, on, angle, self.width + sink if sink is not None else 0.0)
+
+    @property
+    def mass_g(self):
+        """Catalogue mass in grams, None if the table has none."""
+        return None if self.mass_kg is None else round(self.mass_kg * 1000.0, 4)
+
+    @property
+    def outer(self):
+        return self._local_point(self.width)
+
+    def _local(self):
+        return _bearing_local(self.bore, self.diameter, self.width, self.capped)

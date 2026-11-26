@@ -1,6 +1,7 @@
 """soma: helper library of SOMA. In model.py: `from soma import add_part, param, import_step, import_assembly`.
 Values the user can change in the app (Parameters panel): `WIDTH = param(40.0, "Width", min=20, max=80, unit="mm")`.
-Standard parts (screws, nuts, washers, heat-set inserts): `from soma.fasteners import Screw, Nut, Washer, HeatSetInsert`.
+Standard parts (screws, nuts, washers, heat-set inserts, bearings): `from soma.fasteners import Screw, Nut, Washer,
+HeatSetInsert, Bearing`.
 Animations in animations/*.py: `from soma.anim import Animation`."""
 import time as _time
 
