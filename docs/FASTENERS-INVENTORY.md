@@ -49,23 +49,25 @@ hole it needs come from the same table row, so they cannot drift apart.
 | Heat-set insert | ruthex, CNCKitchen, McMaster-Carr, Hilitchi, AE-SamZhihui |
 | Shoulder screw | ISO 7379 |
 | Low profile socket head | OpenBuilds series (not DIN 7984 — see G3) |
+| Pan head, cheese head | ISO 1580, ISO 1207 |
+| Flange nut, domed cap nut | DIN 1665, DIN 1587 |
+| Chamfered washer, internal-tooth lock washer | ISO 7090, DIN 6797 |
 | Deep-groove ball bearing | 56 catalogue numbers, open and capped, bore 3–10 mm |
 | Retaining ring | DIN 471 (shaft), DIN 472 (bore) |
 | Parallel key | DIN 6885 form A |
 
 ### 1.3 Data tables
 
-20 of the 42 files in `bd_warehouse/src/bd_warehouse/data/` are present.
+26 of the 42 files in `bd_warehouse/src/bd_warehouse/data/` are present, and every one of them is read by the
+module. The copy is lean, not accidental: what is missing falls into three groups.
 
-| Present | Not present (relevant) |
+| Missing | Why |
 |---|---|
-| `button_head_parameters.csv`, `clearance_hole_sizes.csv`, `countersunk_head_parameters.csv`, `drill_sizes.csv`, `heatset_nut_parameters.csv`, `hex_head_parameters.csv`, `hex_nut_parameters.csv`, `nominal_screw_lengths.csv`, `plain_washer_parameters.csv`, `setscrew_parameters.csv`, `socket_head_cap_parameters.csv`, `square_nut_parameters.csv`, `tap_hole_sizes.csv`, `single_row_deep_groove_ball_bearing_parameters.csv`, `single_row_capped_deep_groove_ball_bearing_parameters.csv` | `pan_head_parameters.csv`, `cheese_head_parameters.csv`, `low_profile_parameters.csv`, `shoulder_screw.csv`, `hex_head_with_flange_parameters.csv`, `hex_nut_with_flange_parameters.csv`, `domed_cap_nut_parameters.csv`, `brad_tee_nut_parameters.csv`, `chamfered_washer_parameters.csv`, `internal_tooth_lock_washer_parameters.csv`, `din471.csv`, `din472.csv`, `shaft_key_parameters.csv`, `o-ring_parameters.csv`, `single_row_angular_contact_ball_bearing_parameters.csv`, `single_row_cylindrical_roller_bearing_parameters.csv`, `single_row_tapered_roller_bearing_parameters.csv`, `imperial_set_screw_parameters.csv`, `metric_set_screw_parameters.csv` |
+| three bearing tables (angular contact, cylindrical roller, tapered roller) | No code reads them — see G1a |
+| `o-ring_parameters.csv` and the gland tables | G7, not built yet |
+| `hex_head_with_flange_parameters.csv`, `brad_tee_nut_parameters.csv`, `imperial_set_screw_parameters.csv`, `metric_set_screw_parameters.csv` | No part needs them yet; the T-nut table is unusable (see G8) |
 
 `drill_sizes.csv` is present but only used to resolve heat-set insert holes (`_drill_mm`).
-
-Checked: all 20 files are read by the module, there is no dead table. The copy is lean, not accidental: three bearing
-tables that exist upstream (angular contact, cylindrical roller, tapered roller) are deliberately absent, because no
-code reads them — see G1a.
 
 ---
 
@@ -94,16 +96,19 @@ every output. The command now groups purchased parts by designation with a count
 mass, and writes CSV for a spreadsheet. What it still cannot do: prices, and the material of a purchased part (the
 model has a display colour, not a material).
 
-**G3. Head shapes that fixtures use daily are missing.** ✅ **Done for shoulder screws and low profile.** `Screw`
-gains `"ISO 7379"` and `"OpenBuilds"`. A shoulder screw is built as one revolve (head, shoulder, undercut, threaded
-end) because the undercut is narrower than the thread and a fuse of cylinders would leave a bore there instead of a
+**G3. Head shapes that fixtures use daily are missing.** ✅ **Done.** `Screw` gains `"ISO 7379"`, `"OpenBuilds"`,
+`"ISO 1580"` and `"ISO 1207"`. A shoulder screw is built as one revolve (head, shoulder, undercut, threaded end)
+because the undercut is narrower than the thread and a fuse of cylinders would leave a bore there instead of a
 groove; its length is the shoulder length as the standard defines it, so `shank_length` is longer and
 `shoulder_hole()` cuts the pivot hole at the shoulder diameter, not the thread clearance.
 
 The low profile series in the table is **OpenBuilds, not DIN 7984**: the head is lower (M3: 1.5 vs 2.0 mm) and wider
 (5.68 vs 5.5 mm). It is registered under the name it really is, and asking for "DIN 7984" answers with that sentence
-instead of quietly handing out different dimensions. Pan head and cheese head (`pan_head_parameters.csv`,
-`cheese_head_parameters.csv`) are still missing — one table and one head branch each.
+instead of quietly handing out different dimensions.
+
+Pan head (ISO 1580) and cheese head (ISO 1207) share one `head="pan"` branch — a flat cylinder with a chamfered rim,
+which is what both are. The slot is not modelled, so `Screw.key` returns `None` for them instead of inventing a width
+across flats; the pan head is visibly the flat one (M3: 1.8 mm high against 3.0 mm for a socket head).
 
 **G4. `ISO 4014` / `DIN 931` are modelled as fully threaded.** ✅ **Done, as the second option.** The table has no
 thread-length column, so there was nothing to read: `Screw.thread_length` now computes the standard value
@@ -132,9 +137,23 @@ the 2×2, 3×3 and 8×7 keys.
 **G7. O-rings.** Four tables (sizes, static gland, dynamic gland). The gland dimensions are the valuable part: a
 correct O-ring groove is hard to get right by hand, and SOMA already has the cut-tool pattern to express it.
 
-**G8. Nut and washer variants.** Flange nut, domed cap nut, T-nut (woodworking), unchamfered hex nut, chamfered
-washer, internal-tooth lock washer. Each is one table row set plus a small geometry branch; `NUTS` and `WASHERS`
-are dictionaries built for exactly this.
+**G8. Nut and washer variants.** ✅ **Done, except the T-nut.** `Nut` gains `"DIN 1665"` (hex with flange) and
+`"DIN 1587"` (domed cap nut), `Washer` gains `"ISO 7090"` (chamfered) and `"DIN 6797"` (internal-tooth lock washer).
+Two geometry branches each: the flange nut is the hexagon plus a disc at its seat, the cap nut a hemisphere on top of
+the hexagon with the bore stopping at the dome — so it is genuinely closed, and a probe above the hexagon finds
+material. The toothed washer is the ring plus `n` radial teeth reaching 30 % of the radial width into the bore; the
+table's `n` column is used as the count.
+
+`Nut.trap()` had to learn the shapes too, or the pocket would be wrong in a way that is only visible after cutting:
+the flange gets a round pocket with the hexagon above it, the cap nut a round pocket up over the dome. A side slot is
+refused for both with a sentence instead of silently cutting a slot a flange cannot pass through.
+
+The **T-nut is not implemented on purpose.** `brad_tee_nut_parameters.csv` has three rows, one brand, identical
+values for M6/M8/M10 and a 36 mm flange diameter on an M6 nut — a scraped product listing, not a standard. Upstream
+keeps `BradTeeNut` commented out for the same reason. The file was deleted again rather than shipped unread.
+
+The **unchamfered hex nut** stays out as well: no table in the set describes one (every nut column is a chamfered
+standard), and inventing the chamfer away would change a dimension the drawings do not have.
 
 **G9. `Washer` has no `trap()`.** ✅ **Done** — `washer.trap(clearance=0.2, depth=None)`, a round pocket of
 `outer_diameter + 2 × clearance` and `thickness + clearance` deep, open to the surface when the washer is `sunk`.
@@ -179,8 +198,7 @@ This is worth stating once in the `standard-parts` skill so agents stop "improvi
 | "Do not duplicate functionality" | Confirmed: importing `cq_warehouse` would duplicate all four classes. |
 | Runtime change | **None needed.** New families are new modules in `python/soma/`, reading new CSVs from the same `data/fasteners/` folder under the same Apache-2.0 notice. No new pip dependency. |
 
-Status: G1, G2, G3 (shoulder and low profile), G4, G5, G6, G9, G10 and G11 are implemented. G7, G8 and the rest are
-open, in the order above.
+Status: G1, G2, G3, G4, G5, G6, G8, G9, G10 and G11 are implemented. G7 and the rest are open, in the order below.
 
 ### Recommended order
 
@@ -190,10 +208,11 @@ open, in the order above.
    decided that, not taste.
 3. ~~**G5, G6**~~ — **done** (`RetainingRing`, `ShaftKey`). Two tables plus two geometry branches, as estimated;
    the only surprise was which of the two key depth columns belongs to the shaft.
-4. ~~**G3 (shoulder screw, low profile)**~~ — **done**; pan head and cheese head remain, one table each.
+4. ~~**G3 (shoulder screw, low profile, pan head, cheese head)**~~ — **done**.
 5. ~~**G9, G10, G11**~~ — **done**. Small, and each one removed a way to get a wrong number or a misleading error.
    **G4** went the documentation route: the table has no thread length to read.
-6. **G7 (O-rings), G8 (nut and washer variants)** — the two families still missing.
+6. ~~**G8 (nut and washer variants)**~~ — **done**, except the T-nut, which has no usable table (§G8).
+7. **G7 (O-rings)** — the one family still missing. Four tables, and the gland dimensions are the part worth having.
 7. **G12–G14** — only against a concrete model that needs them.
 
 ### Licensing note

@@ -37,9 +37,14 @@ add_part("Screw 1", s, group="Hardware")               # role "hardware" automat
   of thickness `T`: `w = Washer("ISO 7089", "M3", at=s.point(T), direction="+Z")`, then
   `Nut("ISO 4032", "M3", at=w.outer, direction="+Z")`.
 - Standards: screws ISO 4762 (socket head, the default), ISO 7380 (button head, low), ISO 10642 (countersunk),
-  ISO 4017, ISO 4014, DIN 931 (hex head), ISO 4026 (set screw). Nuts ISO 4032, thin ISO 4035, high ISO 4033, square
-  DIN 557. Washers ISO 7089, large ISO 7093 on soft material. Inserts by ruthex (default), CNCKitchen, McMaster-Carr,
-  Hilitchi. In prints, heat-set inserts instead of nuts where the screw is opened often.
+  ISO 4017, ISO 4014, DIN 931 (hex head), ISO 4026 (set screw), ISO 1580 (pan head), ISO 1207 (cheese head).
+  Nuts ISO 4032, thin ISO 4035, high ISO 4033, square DIN 557, with flange DIN 1665, domed cap DIN 1587. Washers
+  ISO 7089, large ISO 7093 on soft material, chamfered ISO 7090, internal-tooth lock DIN 6797. Inserts by ruthex
+  (default), CNCKitchen, McMaster-Carr, Hilitchi. In prints, heat-set inserts instead of nuts where the screw is
+  opened often.
+- Slotted heads (ISO 1580, ISO 1207) have no hex socket, so `s.key` is `None` — check before using it. The cap nut
+  DIN 1587 is closed, so a screw through it has to stop inside the dome, and `nut.height` is only the hexagon:
+  `nut.overall_height` is the height to the top of the dome.
 - Tapping into metal: `s.tap_hole(material="hard")` for steel, the default `"soft"` is for aluminium, brass and
   plastic. The two drills differ (M6: 5.0 against 5.4 mm), and using the soft one in steel makes the tap tear.
 - Read sizes from the objects instead of typing numbers: `s.head_diameter`, `s.head_height`, `s.key`, `s.clearance()`,
@@ -55,6 +60,10 @@ add_part("Screw 1", s, group="Hardware")               # role "hardware" automat
 `nut.trap(clearance=0.2)` is the pocket for the nut, open to the surface with `sunk=True`. With `slot="+X",
 slot_length=…` the nut slides in from the side. At `angle=0` two flats are parallel to X, so a slot along X is exactly
 as wide as the nut. For a slot along Y use `angle=30`.
+
+The shape follows the nut: a flange nut (DIN 1665) gets a round pocket for its flange with the hexagon above it, a
+domed cap nut (DIN 1587) a round pocket up over the dome. A side slot is refused for both — a flange and a dome cannot
+pass through one — so cut that pocket by hand if the design needs it.
 
 `washer.trap(clearance=0.2)` is the same idea for a recessed washer: a round pocket so the washer sits below the
 surface and the screw head does not stand proud.
@@ -149,15 +158,16 @@ hub = hub.cut(key.keyway("hub"))              # broached, square ends, 2.8 mm de
 
 ## What the library covers, and what it does not
 
-Covered: screws ISO 4762, 7380, 10642, 4017, 4014, DIN 931, 4026, 7379 (shoulder) and the OpenBuilds low profile
-series; nuts ISO 4032, 4033, 4035, DIN 557; washers ISO 7089, 7091, 7093; heat-set inserts from five makers;
+Covered: screws ISO 4762, 7380, 10642, 4017, 4014, DIN 931, 4026, 7379 (shoulder), 1580 (pan head), 1207 (cheese
+head) and the OpenBuilds low profile series; nuts ISO 4032, 4033, 4035, DIN 557, DIN 1665 (flange), DIN 1587 (domed
+cap); washers ISO 7089, 7091, 7093, 7090 (chamfered), DIN 6797 (internal teeth); heat-set inserts from five makers;
 deep-groove ball bearings from 3 to 10 mm bore, open and capped; retaining rings DIN 471 and DIN 472 for shafts and
 bores from 3 to 300 mm; parallel keys DIN 6885 for shafts from 6 to 50 mm; and the clearance holes, tap drills,
 counterbores, nut traps, insert holes, grooves and keyways that go with them. Nothing else.
 
 Not covered, model by hand (with `role="hardware"`): roller and angular-contact bearings, dowel pins, O-rings, gears,
-sprockets, pulleys, springs, pan head and cheese head screws, flange and cap nuts, imperial fasteners. Ask before
-inventing dimensions; the sizes in this skill are a starting point, not a catalogue.
+sprockets, pulleys, springs, T-nuts, unchamfered hex nuts, imperial fasteners. Ask before inventing dimensions; the
+sizes in this skill are a starting point, not a catalogue.
 
 Three simplifications to know about:
 

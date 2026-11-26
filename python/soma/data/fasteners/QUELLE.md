@@ -27,6 +27,12 @@ Verwendet von `soma/fasteners.py`. Der Code dort ist eigener Code und übernimmt
 | `single_row_capped_deep_groove_ball_bearing_parameters.csv` | Rillenkugellager, gedeckelt oder gedichtet (-2Z, -2RS1, -2RZ) |
 | `shoulder_screw.csv` | ISO 7379 (Schulterschraube) |
 | `low_profile_parameters.csv` | Flachkopf-Innensechskant nach OpenBuilds (nicht DIN 7984, siehe unten) |
+| `pan_head_parameters.csv` | ISO 1580 (Linsenkopf mit Schlitz) |
+| `cheese_head_parameters.csv` | ISO 1207 (Zylinderkopf mit Schlitz) |
+| `hex_nut_with_flange_parameters.csv` | DIN 1665 (Sechskantmutter mit Bund) |
+| `domed_cap_nut_parameters.csv` | DIN 1587 (Hutmutter) |
+| `chamfered_washer_parameters.csv` | ISO 7090 (Scheibe mit Fase) |
+| `internal_tooth_lock_washer_parameters.csv` | DIN 6797 (Scheibe mit Innenzähnen) |
 | `din471.csv` | Sprengringe für Wellen |
 | `din472.csv` | Sprengringe für Bohrungen |
 | `shaft_key_parameters.csv` | Passfedern DIN 6885 |
@@ -34,6 +40,10 @@ Verwendet von `soma/fasteners.py`. Der Code dort ist eigener Code und übernimmt
 Nicht kopiert, obwohl vorhanden: `single_row_angular_contact_ball_bearing_parameters.csv`,
 `single_row_cylindrical_roller_bearing_parameters.csv`, `single_row_tapered_roller_bearing_parameters.csv`. Kein Code
 liest sie, und eine Tabelle im Ordner, die niemand liest, ist genau der Fehler, vor dem die Inventur warnt.
+
+Ebenfalls nicht kopiert: `brad_tee_nut_parameters.csv`. Die Datei hat drei Zeilen, eine Marke, für M6/M8/M10 dieselben
+Werte und bei einer M6-Mutter einen Bund von 36 mm — ein abgeschriebenes Produktblatt, keine Norm. `BradTeeNut` ist
+auch upstream auskommentiert. Ohne brauchbare Tabelle gibt es kein T-Nut.
 
 Bekannte Eigenheiten der Daten:
 
@@ -74,3 +84,20 @@ Eigenheiten der neuen Tabellen:
 - `shaft_key_parameters.csv` nennt die Nuttiefen `t2` und `t4`; `t4` ist die Nut in der **Welle**, `t2` die in der
   **Nabe**. Geprüft an allen 31 Zeilen: `t2 + t4` ist immer `h` plus 0,2 bis 0,3 mm Spiel, und für 2x2, 3x3 und 8x7
   stimmt die Zuordnung mit DIN 6885 überein. Eine Länge führt die Tabelle nicht — die ist eine Entwurfsentscheidung.
+- `pan_head_parameters.csv` und `cheese_head_parameters.csv` führen neben `dk` und `k` auch `n` und `t`, Breite und
+  Tiefe des Schlitzes. Der Schlitz wird nicht gezeichnet (wie kein Gewinde), also liest der Code `n` und `t` nicht —
+  und `Screw.key` gibt für diese Köpfe `None` zurück, statt eine Schlüsselweite zu erfinden, die es nicht gibt.
+  `pan_head_parameters.csv` enthält außerdem Spalten für ISO 14583 und ASME B18.6.3 und Zeilen in Zoll; genutzt wird
+  nur `iso1580` von M1.6 bis M10, die Zollzeilen haben dort leere Felder.
+- `cheese_head_parameters.csv` hat **keine Überschrift in der ersten Spalte**; die Größe steht unter einem leeren
+  Namen. `_table` nimmt die erste Spalte unabhängig von ihrem Namen, deshalb fällt das nur beim Lesen der Datei auf.
+- `hex_nut_with_flange_parameters.csv` (DIN 1665, M5 bis M20): `c` ist die Dicke des Bundes, `dc` sein Durchmesser,
+  `m` die Höhe über alles. Der Bund sitzt an der Auflagefläche, nicht in der Mitte.
+- `domed_cap_nut_parameters.csv` (DIN 1587, M4 bis M24) hat nur `dk`, `m` und `s`. Die Kuppe ist eine Halbkugel mit
+  `dk` als Durchmesser auf dem Sechskant, die Gesamthöhe also `m + dk/2` — genau das prüft der Test, denn eine offene
+  Mutter wäre sonst nicht von einer geschlossenen zu unterscheiden.
+- `chamfered_washer_parameters.csv` (ISO 7090) beginnt bei **M5**; M3 und M4 gibt es in der Norm nicht. Die Fase ist
+  nicht gezeichnet, nur die Scheibe — die Maße `d1`, `d2`, `h` stimmen trotzdem.
+- `internal_tooth_lock_washer_parameters.csv` (DIN 6797, M2 bis M14) führt in `n` die **Anzahl** der Zähne, nicht eine
+  Länge. Die Zähne greifen 30 % der radialen Breite nach innen; ihre genaue Form ist wie bei den Sprengringen eine
+  Zeichnung und kein Maß. Die Zollzeilen der Datei gehören zu ASME B18.21.1 und bleiben ungenutzt.

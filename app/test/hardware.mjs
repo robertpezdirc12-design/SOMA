@@ -1,7 +1,7 @@
-// Test für die Zukaufteile nach den Lagern (Lücken G3, G5, G6): Schulter- und Flachkopfschraube, Sprengringe
-// DIN 471/472 mit Nut, Passfeder DIN 6885 mit Nut. Maße aus den Tabellen, ein Körper, Lage wie bei Scheibe und Lager,
-// Werkzeuge zum Schneiden. Dann ohne App über die CLI: die Teile sind Zukaufteile in der Kosovnica und Körper im
-// Messbericht. Läuft ohne App, nur mit Python.
+// Test für die Zukaufteile nach den Lagern (Lücken G3, G5, G6, G8): Schulter-, Flachkopf- und Schlitzkopfschraube,
+// Sprengringe DIN 471/472 mit Nut, Passfeder DIN 6885 mit Nut, Bund- und Hutmutter, Fasen- und Zahnscheibe. Maße aus den
+// Tabellen, ein Körper, Lage wie bei Scheibe und Lager, Werkzeuge zum Schneiden. Dann ohne App über die CLI: die Teile
+// sind Zukaufteile in der Kosovnica und Körper im Messbericht. Läuft ohne App, nur mit Python.
 // Aufruf: npm run test:hardware (SOMA_PYTHON zeigt auf das Python mit cadquery).
 import { spawnSync } from 'node:child_process';
 import fs from 'node:fs';
@@ -19,8 +19,11 @@ const py = (args, opts = {}) => spawnSync(PY, ['-m', 'soma', ...args], {
 
 const LIB_CHECKS = String.raw`
 import json
+import math
 import cadquery as cq
-from soma.fasteners import Screw, Washer, RetainingRing, ShaftKey, lengths, standards, _plain_rows
+from soma.fasteners import Screw, Nut, Washer, RetainingRing, ShaftKey, lengths, standards, _plain_rows
+
+COS30 = math.cos(math.radians(30))
 
 def out(label, ok, detail=""):
     print(json.dumps([label, bool(ok), str(detail)[:110]]), flush=True)
@@ -43,6 +46,9 @@ def dia_at(shape, z, th=0.02):
     """Durchmesser des Querschnitts bei z: beweist, dass dort wirklich ein Absatz ist."""
     box = cq.Solid.makeBox(200, 200, th, cq.Vector(-100, -100, z - th / 2))
     return shape.intersect(box).BoundingBox().xlen
+
+def cyl(d, z0, z1):
+    return cq.Solid.makeCylinder(d / 2, z1 - z0, cq.Vector(0, 0, z0), cq.Vector(0, 0, 1))
 
 # --- G3: Schulter- und Flachkopfschraube ------------------------------------------------------------------------------
 
@@ -154,6 +160,60 @@ out("ShaftKey(20, 40) und ShaftKey(\"DIN 6885\", 20, 40) sind dasselbe",
     ShaftKey(20, 40, at=(0, 0, 0)).designation == ShaftKey("DIN 6885", 20, 40, at=(0, 0, 0)).designation
     == "DIN 6885 6x6x40")
 
+# --- G8: Schlitzkopf, Muttern- und Scheibenvarianten -------------------------------------------------------------------
+
+pan = Screw("ISO 1580", "M3x10", at=(0, 0, 0))
+cheese = Screw("ISO 1207", "M3x10", at=(0, 0, 0))
+sock = Screw("ISO 4762", "M3x10", at=(0, 0, 0))
+out("Schlitzkopf M3: Kopf aus der Tabelle, halb so hoch wie Inbus (1,8 gegen 3,0), keine Schluesselweite",
+    len(pan.shape.Solids()) == 1 and near(pan.head_diameter, 5.6, 1e-9) and near(pan.head_height, 1.8, 1e-9)
+    and pan.key is None and near(cheese.head_diameter, 5.5, 1e-9) and near(cheese.head_height, 2.0, 1e-9)
+    and cheese.key is None and pan.head_height < sock.head_height,
+    (pan.head_diameter, pan.head_height, sock.head_height, pan.key))
+
+fn = Nut("DIN 1665", "M6", at=(0, 0, 0))
+d = fn.dims
+out("DIN 1665 M6: Bund %s breit und %s hoch, darueber der Sechskant" % (d["dc"], d["c"]),
+    len(fn.shape.Solids()) == 1 and fn.shape.isValid()
+    and near(dia_at(fn.shape, 0.5), d["dc"], 0.01) and near(dia_at(fn.shape, 5.0), d["s"] / COS30, 0.01)
+    and near(bb(fn.shape)[5], d["m"], 1e-6),
+    (round(dia_at(fn.shape, 0.5), 2), round(dia_at(fn.shape, 5.0), 2), round(bb(fn.shape)[5], 2)))
+
+cn = Nut("DIN 1587", "M6", at=(0, 0, 0))
+d = cn.dims
+over = cq.Solid.makeBox(0.5, 0.5, 0.5, cq.Vector(-0.25, -0.25, d["m"] + 0.2))
+inbore = cq.Solid.makeBox(0.5, 0.5, 0.5, cq.Vector(-0.25, -0.25, 0.5))
+out("DIN 1587 M6: geschlossen, Kuppe %s hoch, das Gewinde geht nicht durch" % (d["dk"] / 2),
+    len(cn.shape.Solids()) == 1 and near(bb(cn.shape)[5], d["m"] + d["dk"] / 2, 0.02)
+    and near(cn.overall_height, d["m"] + d["dk"] / 2, 1e-9) and near(cn.outer[2], cn.overall_height, 1e-9)
+    and cn.shape.intersect(over).Volume() > 0.1 and cn.shape.intersect(inbore).Volume() < 1e-6,
+    (round(bb(cn.shape)[5], 2), round(cn.shape.intersect(over).Volume(), 3)))
+
+ft, ct = fn.trap(), cn.trap()
+out("trap: Bundmutter bekommt ein rundes Lager fuer den Bund, Hutmutter ein Loch ueber die Kuppe",
+    near(dia_at(ft, 0.5), 14.6, 0.01) and near(dia_at(ft, 3.0), 10.4 / COS30, 0.01)
+    and near(bb(ct)[1] - bb(ct)[0], 9.9, 1e-6) and near(bb(ct)[5], 5.0 + 9.5 / 2 + 0.2, 1e-6),
+    (round(dia_at(ft, 0.5), 2), round(bb(ct)[1] - bb(ct)[0], 2), round(bb(ct)[5], 2)))
+
+out("Ein Schlitz ist fuer Sechskant und Vierkant, nicht fuer Bund und Kuppe",
+    raises(lambda: Nut("DIN 1665", "M6", at=(0, 0, 0)).trap(slot="+X", slot_length=20))
+    and raises(lambda: Nut("DIN 1587", "M6", at=(0, 0, 0)).trap(slot="+X", slot_length=20))
+    and len(Nut("DIN 557", "M6", at=(0, 0, 0)).trap(slot="+X", slot_length=20).Solids()) == 1)
+
+cw = Washer("ISO 7090", "M5", at=(0, 0, 0))
+out("ISO 7090 M5: Maße aus der Tabelle, Loch offen",
+    len(cw.shape.Solids()) == 1 and near(cw.inner, 5.3, 1e-9) and near(cw.outer_diameter, 10.0, 1e-9)
+    and near(cw.thickness, 1.1, 1e-9)
+    and cw.shape.intersect(cq.Solid.makeBox(1, 1, 3, cq.Vector(-0.5, -0.5, -1))).Volume() < 1e-6,
+    (cw.inner, cw.outer_diameter, cw.thickness))
+
+tw = Washer("DIN 6797", "M3", at=(0, 0, 0))
+teeth = tw.shape.intersect(cyl(3.1, -1, 1).cut(cyl(2.4, -2, 2)))
+out("DIN 6797 M3: %d Innenzaehne, die in die Bohrung greifen" % tw.dims["n"],
+    len(tw.shape.Solids()) == 1 and near(bb(tw.shape)[1] - bb(tw.shape)[0], 6.0, 1e-6)
+    and len(teeth.Solids()) == int(tw.dims["n"]) and teeth.Volume() > 0.1,
+    (len(teeth.Solids()), round(teeth.Volume(), 3)))
+
 # --- G9, G10, G11, G4: Werkzeuge und Meldungen -------------------------------------------------------------
 
 s6 = Screw("ISO 4762", "M6x20", at=(0, 0, 0))
@@ -190,17 +250,24 @@ out("standards() nennt die neuen Familien",
     "DIN 471" in st["retaining_rings"] and "DIN 472" in st["retaining_rings"]
     and "DIN 6885" in st["shaft_keys"] and "ISO 7379" in st["screws"] and "OpenBuilds" in st["screws"],
     sorted(st))
+out("standards() kennt auch die Varianten: Schlitzkopf, Bund- und Hutmutter, Fasen- und Zahnscheibe",
+    "ISO 1580" in st["screws"] and "ISO 1207" in st["screws"]
+    and "DIN 1665" in st["nuts"] and "DIN 1587" in st["nuts"]
+    and "ISO 7090" in st["washers"] and "DIN 6797" in st["washers"],
+    (sorted(st["nuts"]), sorted(st["washers"])))
 `;
 
 const MODEL = `import cadquery as cq
 from soma import add_part
-from soma.fasteners import Screw, RetainingRing, ShaftKey
+from soma.fasteners import Screw, Nut, Washer, RetainingRing, ShaftKey
 
 add_part("Shaft", cq.Workplane().circle(10).extrude(60))
 add_part("Ring", RetainingRing("DIN 471", 20, at=(0, 0, 55)))
 add_part("Key", ShaftKey(20, 40, at=(0, 10, 20)))
 add_part("Pin", Screw("ISO 7379", "M6x25", at=(30, 0, 0), direction="+Z"))
 add_part("Screw", Screw("OpenBuilds", "M5x15", at=(-30, 0, 0), direction="+Z"))
+add_part("FlangeNut", Nut("DIN 1665", "M8", at=(0, -30, 0), direction="+Z"))
+add_part("LockWasher", Washer("DIN 6797", "M8", at=(0, 30, 0), direction="+Z"))
 `;
 
 const lib = spawnSync(PY, ['-c', LIB_CHECKS], { encoding: 'utf8', env: { ...process.env, PYTHONIOENCODING: 'utf-8' } });
@@ -209,7 +276,7 @@ for (const line of lines) {
   const [label, ok, detail] = JSON.parse(line);
   check(label, ok, detail);
 }
-check('Python-Prüfungen liefen durch', lib.status === 0 && lines.length >= 21,
+check('Python-Prüfungen liefen durch', lib.status === 0 && lines.length >= 32,
   lib.status === 0 ? `${lines.length} Prüfungen` : (lib.stderr ?? '').slice(-300));
 
 const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'soma-hardware-'));
@@ -225,6 +292,11 @@ try {
     line('RetainingRing')?.designation === 'DIN 471 20x1.2' && line('ShaftKey')?.designation === 'DIN 6885 6x6x40'
       && screws.join(' | ') === 'ISO 7379 M6x25 | OpenBuilds M5x15',
     JSON.stringify(doc?.purchased ?? bom.stderr.slice(-150)));
+
+  check('Kosovnica: Bundmutter und Zahnscheibe sind eigene Zeilen, nicht als Schraube gezaehlt',
+    line('Nut')?.designation === 'DIN 1665 M8' && line('Washer')?.designation === 'DIN 6797 M8'
+      && (doc?.purchased ?? []).length === 6,
+    JSON.stringify((doc?.purchased ?? []).map((p) => `${p.kind}:${p.designation}`)));
 
   const insp = py(['inspect', '--json', '--project', dir]);
   const ins = insp.status === 0 ? JSON.parse(insp.stdout) : null;

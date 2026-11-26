@@ -86,6 +86,10 @@ SCREWS = {
     # Schulter: die Laenge ist die Schulterlaenge, das Gewindeende kommt zusaetzlich dazu
     "iso7379": dict(name="ISO 7379", title="Hexagon socket head shoulder screw", table="shoulder_screw.csv",
                     col="iso7379", head="shoulder", cols=("ds", "dk", "k", "b", "s", "t", "g2", "dg2")),
+    "iso1580": dict(name="ISO 1580", title="Pan head screw, slotted", table="pan_head_parameters.csv",
+                    col="iso1580", head="pan", cols=("dk", "k")),
+    "iso1207": dict(name="ISO 1207", title="Cheese head screw, slotted", table="cheese_head_parameters.csv",
+                    col="iso1207", head="pan", cols=("dk", "k")),
     # Der Kopf ist niedriger als bei DIN 7984 und der Durchmesser groesser: eigene Reihe, kein DIN-7984-Ersatz
     "openbuilds": dict(name="OpenBuilds", title="Low profile socket head screw (OpenBuilds)",
                        table="low_profile_parameters.csv", col="OpenBuilds", head="socket",
@@ -96,11 +100,19 @@ NUTS = {
     "iso4033": dict(name="ISO 4033", title="Hex nut, high", table="hex_nut_parameters.csv", col="iso4033", shape="hex"),
     "iso4035": dict(name="ISO 4035", title="Hex nut, thin", table="hex_nut_parameters.csv", col="iso4035", shape="hex"),
     "din557": dict(name="DIN 557", title="Square nut", table="square_nut_parameters.csv", col="din557", shape="square"),
+    "din1665": dict(name="DIN 1665", title="Hex nut with flange", table="hex_nut_with_flange_parameters.csv",
+                    col="din1665", shape="flange", cols=("m", "s", "dc", "c")),
+    "din1587": dict(name="DIN 1587", title="Domed cap nut", table="domed_cap_nut_parameters.csv",
+                    col="din1587", shape="cap", cols=("m", "s", "dk")),
 }
 WASHERS = {
     "iso7089": dict(name="ISO 7089", title="Washer", table="plain_washer_parameters.csv", col="iso7089"),
     "iso7091": dict(name="ISO 7091", title="Washer, coarse", table="plain_washer_parameters.csv", col="iso7091"),
     "iso7093": dict(name="ISO 7093", title="Washer, large", table="plain_washer_parameters.csv", col="iso7093"),
+    "iso7090": dict(name="ISO 7090", title="Washer, chamfered", table="chamfered_washer_parameters.csv", col="iso7090"),
+    "din6797": dict(name="DIN 6797", title="Lock washer, internal teeth",
+                    table="internal_tooth_lock_washer_parameters.csv", col="din6797", shape="toothed",
+                    cols=("d1", "d2", "h", "n")),
 }
 INSERT_BRANDS = {"ruthex": "ruthex", "cnckitchen": "CNCKitchen", "mcmaster": "McMaster-Carr", "mcmastercarr": "McMaster-Carr",
                  "hilitchi": "Hilitchi", "aesamzhihui": "AE-SamZhihui"}
@@ -587,6 +599,8 @@ def _screw_local(head, d, length, pitch, dims):
         hc = (p["dk"] - d) / 2 / math.tan(math.radians(p["a"] / 2))
         cap = cq.Solid.makeCone(d / 2, p["dk"] / 2, hc, cq.Vector(0, 0, -hc), cq.Vector(0, 0, 1))
         cap = _socket(cap, p["s"], p["t"], 0.0)
+    elif head == "pan":  # flacher Zylinder mit gerundetem Rand; Schlitz und Kreuzschlitz sind nicht modelliert
+        cap = cq.Workplane().circle(p["dk"] / 2).extrude(p["k"]).faces(">Z").chamfer(0.08 * p["k"]).val()
     elif head == "hex":
         cap = _chamfered_hex(p["s"], p["k"], both=False)
     elif head == "shoulder":
@@ -609,7 +623,7 @@ class Screw(_Part):
 
     standard      "ISO 4762" (socket head), "ISO 7380" (button head), "ISO 10642" (countersunk), "ISO 4017", "ISO 4014",
                   "DIN 931" (hex head), "ISO 4026" (set screw), "ISO 7379" (shoulder screw),
-                  "OpenBuilds" (low profile socket head)
+                  "OpenBuilds" (low profile socket head), "ISO 1580" (pan head), "ISO 1207" (cheese head)
     at            seat of the underside of the head (countersunk screw, set screw: the top), (x, y, z) or cq.Location
     direction     from the seat into the material, default "-Z"
     on            part the screw sits on: the seat is searched for along `direction`
@@ -671,8 +685,8 @@ class Screw(_Part):
 
     @property
     def key(self):
-        """Width across flats: of the hex socket, or of the hex head."""
-        return self.dims["s"]
+        """Width across flats of the hex socket or the hex head, None for a slotted head (pan, cheese)."""
+        return self.dims.get("s")
 
     @property
     def thread_length(self):
@@ -778,11 +792,19 @@ class Screw(_Part):
 # --- Muttern, Scheiben, Gewindeeinsaetze -------------------------------------------------------------------------------
 
 @functools.cache
-def _nut_local(shape, d, m, s):
+def _nut_local(shape, d, m, s, dims=()):
+    dims = dict(dims)
     if shape == "hex":
         body = _chamfered_hex(s, m, both=True)
-    else:
+    elif shape == "square":
         body = cq.Solid.makeBox(s, s, m, cq.Vector(-s / 2, -s / 2, 0))
+    elif shape == "flange":  # Sechskant mit Bund am Auflagebund
+        body = _one(_chamfered_hex(s, m, both=True).fuse(_cyl(dims["dc"], 0.0, dims["c"])))
+    elif shape == "cap":  # geschlossene Hutmutter: Halbkugel auf dem Sechskant, Kernloch endet am Kugelansatz
+        dome = cq.Solid.makeSphere(dims["dk"] / 2, cq.Vector(0, 0, m), angleDegrees1=0.0, angleDegrees2=90.0)
+        return _one(_chamfered_hex(s, m, both=False).fuse(dome).cut(_cyl(d, -0.01, m + 0.01)))
+    else:
+        raise ValueError(f"Unknown nut shape {shape!r}")
     return _one(body.cut(_cyl(d, -0.01, m + 0.01)))
 
 
@@ -790,7 +812,8 @@ class Nut(_Part):
     """Nut. Nut("ISO 4032", "M3", at=(x, y, z), direction="+Z"): rests with one face at `at`, `direction` points
     from there into the material (so upwards for a nut under a plate).
 
-    standard  "ISO 4032" (hex), "ISO 4033" (high), "ISO 4035" (thin), "DIN 557" (square)
+    standard  "ISO 4032" (hex), "ISO 4033" (high), "ISO 4035" (thin), "DIN 557" (square), "DIN 1665" (with flange),
+              "DIN 1587" (domed cap, closed)
     sunk      True: sunk flush (outer side at `at`), 0.5: 0.5 mm deeper. trap() gives the pocket for it
     angle     rotation about the axis in degrees. At 0 two flats are parallel to the X axis (for axis X: to the Y axis)
     """
@@ -803,7 +826,8 @@ class Nut(_Part):
         self.d, length = _parse_size(size, None, spec["name"])
         if length is not None:
             raise ValueError(f"{spec['name']}: nuts have no length, give only \"M{_fmt(self.d)}\"")
-        vals = _lookup(spec["table"], spec["col"], ("m", "s"), self.d, spec["name"])
+        vals = _lookup(spec["table"], spec["col"], spec.get("cols", ("m", "s")), self.d, spec["name"])
+        self.dims = vals
         self.height, self.key = vals["m"], vals["s"]
         sink = _sink(sunk, spec["name"])
         self.sunk = sink is not None
@@ -815,24 +839,46 @@ class Nut(_Part):
 
     @property
     def outer(self):
-        return self._local_point(self.height)
+        return self._local_point(self.overall_height)
+
+    @property
+    def overall_height(self):
+        """Height from the seat to the highest point: the table's `m`, plus the dome for a cap nut."""
+        if self.shape_kind == "cap":
+            return self.height + self.dims["dk"] / 2
+        return self.height
 
     def _local(self):
-        return _nut_local(self.shape_kind, self.d, self.height, self.key)
+        return _nut_local(self.shape_kind, self.d, self.height, self.key, tuple(sorted(self.dims.items())))
 
     def trap(self, clearance=0.2, slot=None, slot_length=None):
         """Tool for cut(): pocket for the nut, `clearance` per side and in height.
 
-        Sunk nut: open up to the surface. slot="+X" with slot_length: slot to insert the nut from the side, as wide as
-        the nut across the slot (with angle=0 and axis Z that is the width across flats for "+X").
+        Hex and square nut: prism or box. Flange nut: round pocket for the flange, hexagon above it. Cap nut: round
+        pocket up over the dome, so that the nut can be screwed in. A sunk nut opens up to the surface.
+
+        slot="+X" with slot_length: slot to insert the nut from the side, as wide as the nut across the slot (with
+        angle=0 and axis Z that is the width across flats for "+X"). Only for hex and square nuts: a flange or a dome
+        cannot pass through a slot.
         """
         sc = self.key + 2 * clearance
         top = self._zs + MARGIN if self.sunk else self.height + clearance
-        pocket = _hex_prism(sc, 0.0, top) if self.shape_kind == "hex" else \
-            cq.Solid.makeBox(sc, sc, top, cq.Vector(-sc / 2, -sc / 2, 0))
+        if self.shape_kind == "hex":
+            pocket = _hex_prism(sc, 0.0, top)
+        elif self.shape_kind == "flange":  # Bund zuerst, darueber der Sechskant
+            pocket = _cyl(self.dims["dc"] + 2 * clearance, 0.0, self.dims["c"] + clearance)
+            pocket = pocket.fuse(_hex_prism(sc, self.dims["c"] - 0.01, top))
+        elif self.shape_kind == "cap":  # Hutmutter: rundes Loch bis ueber die Kuppe, kein Sechskant noetig
+            pocket = _cyl(self.dims["dk"] + 2 * clearance, 0.0,
+                          self._zs + MARGIN if self.sunk else self.overall_height + clearance)
+        else:
+            pocket = cq.Solid.makeBox(sc, sc, top, cq.Vector(-sc / 2, -sc / 2, 0))
         if slot is not None:
             if not slot_length or slot_length <= 0:
                 raise ValueError("trap: slot needs slot_length, the length of the slot from the axis in mm")
+            if self.shape_kind not in ("hex", "square"):
+                raise ValueError(f"trap: a slot is for hex and square nuts, not for {self.standard}. "
+                                 "Cut the pocket for this nut by hand")
             u = _direction(slot)
             if abs(u.dot(self._dir)) > 1e-6:
                 raise ValueError("trap: slot must be perpendicular to the axis of the nut")
@@ -855,11 +901,27 @@ def _ring_local(d1, d2, h):
     return _one(_cyl(d2, 0, h).cut(_cyl(d1, -0.01, h + 0.01)))
 
 
+@functools.cache
+def _tooth_local(d1, d2, h, n):
+    """Scheibe mit Innenzaehnen (DIN 6797): Ring plus n Zaehne, die nach innen zeigen."""
+    ring = _ring_local(d1, d2, h)
+    if not n:
+        return ring
+    deep = 0.3 * (d2 - d1) / 2          # Zahnlaenge nach innen
+    wide = math.pi * d1 / (2 * n)       # halbe Teilung, damit Zaehne und Luecken gleich breit sind
+    teeth = []
+    for i in range(int(n)):
+        t = cq.Solid.makeBox(deep + 0.3, wide, h, cq.Vector(d1 / 2 - deep, -wide / 2, 0))
+        teeth.append(t.rotate(cq.Vector(0, 0, 0), cq.Vector(0, 0, 1), 360.0 * i / n))
+    return _one(ring.fuse(*teeth))
+
+
 class Washer(_Part):
     """Washer. Washer("ISO 7089", "M3", at=(x, y, z)): rests with one side at `at`, `outer` is the other side, where
     the head or nut then sits.
 
-    standard  "ISO 7089" (normal), "ISO 7091" (coarse), "ISO 7093" (large)
+    standard  "ISO 7089" (normal), "ISO 7091" (coarse), "ISO 7093" (large), "ISO 7090" (chamfered),
+              "DIN 6797" (lock washer with internal teeth)
     """
 
     def __init__(self, standard, size=None, *, at=None, direction=None, on=None, sunk=False, angle=0.0):
@@ -870,8 +932,10 @@ class Washer(_Part):
         self.d, length = _parse_size(size, None, spec["name"])
         if length is not None:
             raise ValueError(f"{spec['name']}: washers have no length, give only \"M{_fmt(self.d)}\"")
-        vals = _lookup(spec["table"], spec["col"], ("d1", "d2", "h"), self.d, spec["name"])
+        vals = _lookup(spec["table"], spec["col"], spec.get("cols", ("d1", "d2", "h")), self.d, spec["name"])
+        self.dims = vals
         self.inner, self.outer_diameter, self.thickness = vals["d1"], vals["d2"], vals["h"]
+        self.shape_kind = spec.get("shape", "ring")
         sink = _sink(sunk, spec["name"])
         self.sunk = sink is not None
         self._place(at, direction, on, angle, self.thickness + sink if sink is not None else 0.0)
@@ -885,6 +949,8 @@ class Washer(_Part):
         return self._local_point(self.thickness)
 
     def _local(self):
+        if self.shape_kind == "toothed":
+            return _tooth_local(self.inner, self.outer_diameter, self.thickness, self.dims.get("n"))
         return _ring_local(self.inner, self.outer_diameter, self.thickness)
 
     def trap(self, clearance=0.2, depth=None):
