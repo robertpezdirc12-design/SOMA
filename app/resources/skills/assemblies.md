@@ -91,10 +91,9 @@ that catch people out:
 
 ## Parts list
 
-A table in `NOTES.md`: part, count, material or process, and for purchased parts size and length. Update it with every
-new part.
+`soma bom` writes it from the model: purchased parts grouped by designation with a count, own parts with volume and,
+with `--density`, mass. `--csv order.csv` gives a table for a spreadsheet. Details in the skill for standard parts.
 
-The designations are already in the model, so do not type them: `soma inspect --json` gives `designation` for every
-part from `soma.fasteners` ("ISO 4762 M3x10"), and the `group` and `role` of every part. Use that to write the table
-instead of recalling what you built. There is no bill-of-materials command yet, so `NOTES.md` is the only place a
-quantity survives.
+`NOTES.md` keeps what the model cannot say: material, process, surface finish, and anything the user asked for that is
+not geometry. Write those there, one line each, with where they came from. The quantities come from `soma bom`, not
+from memory — the same screw written twice in different words is the most common mistake in a hand-written list.

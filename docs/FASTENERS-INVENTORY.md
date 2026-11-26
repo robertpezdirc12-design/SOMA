@@ -72,11 +72,12 @@ Ordered by how often a mechanical design actually needs the part, not by how eas
 and tapered-roller bearings, plus the four tables. A 608-2RS or a 6001 is the second most common purchased part
 after screws, and today the user has to model it by hand or import a STEP. This is the single largest hole.
 
-**G2. No bill of materials.** `HeatSetInsert` stores `part_number` (`fasteners.py:835`), and `registry.py` marks
-standard parts with `role="hardware"`. Nothing ever reads either for a BOM: `grep part_number` finds exactly one
-hit, the assignment. `soma export --all` deliberately skips hardware, so the purchased parts exist in the model
-and then vanish from every output. A `soma bom` command that groups `hardware` parts by designation and count is
-a small change with a large effect, and it is the prerequisite for any "order these parts" workflow.
+**G2. No bill of materials.** ✅ **Done** — `soma bom` (see `docs/BOM.md`). `HeatSetInsert` stores `part_number`
+(`fasteners.py:835`), and `registry.py` marks standard parts with `role="hardware"`; nothing read either, and
+`soma export --all` deliberately skips hardware, so a purchased part existed in the model and then vanished from
+every output. The command now groups purchased parts by designation with a count, lists own parts with volume and
+mass, and writes CSV for a spreadsheet. What it still cannot do: prices, and the material of a purchased part (the
+model has a display colour, not a material).
 
 **G3. Head shapes that fixtures use daily are missing.** No low-profile socket head (DIN 7984), no shoulder screw
 (ISO 7379), no pan head, no cheese head. Shoulder screws in particular are the standard locating element in jigs,
@@ -150,9 +151,11 @@ This is worth stating once in the `standard-parts` skill so agents stop "improvi
 | "Do not duplicate functionality" | Confirmed: importing `cq_warehouse` would duplicate all four classes. |
 | Runtime change | **None needed.** New families are new modules in `python/soma/`, reading new CSVs from the same `data/fasteners/` folder under the same Apache-2.0 notice. No new pip dependency. |
 
+Status: G2 is implemented (`soma bom`). G1 and the rest are open, in the order above.
+
 ### Recommended order
 
-1. **G2 (BOM)** — smallest change, unlocks every purchasing workflow, uses data already in the registry.
+1. ~~**G2 (BOM)**~~ — **done** (`soma bom`). It was the smallest change and it unlocked every purchasing workflow.
 2. **G1 (bearings)** — largest missing family, one new module + four tables.
 3. **G3, G5, G6** — fixture and shaft work; each is one table plus one geometry branch.
 4. **G7, G8, G9, G10, G11** — consistency and correctness of what already exists.

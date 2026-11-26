@@ -40,6 +40,7 @@ Run them in this terminal. They work without the app.
 |---|---|
 | `soma build` | Runs `model.py`, writes `output/model.step` and the viewer cache. **Run it after every change and read the result.** On errors it prints the file, line and message |
 | `soma inspect --json` | Measures the model without writing anything: volume, area, bounding box, number of solids/faces/edges, and whether each part is a valid closed body, per part and in total. `--parts Name`, `--density 1.24` for a mass, `--strict` for an exit code. `--step exports/x.step` measures a finished file. **Use it to check that a change did what it should** instead of guessing from the picture |
+| `soma bom` | The parts list from the model: purchased parts grouped by designation with a count (with the manufacturer's part number for heat-set inserts), own parts with volume, and with `--density` a mass. `--csv order.csv` for a spreadsheet. **Use it before you tell the user what the model needs** |
 | `soma export <Part> --format stl` | Exports one part (formats: step, stl, 3mf, amf, brep, iges, obj, vrml, glb, gltf, dxf, svg) |
 | `soma export --all --format step` | Exports all parts except references, one file each |
 | `soma export --assembly --format step` | Exports the whole model as one STEP file with groups, names and colors, references under "Reference" |

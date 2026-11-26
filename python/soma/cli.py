@@ -298,6 +298,32 @@ def cmd_mcp(args):
         return _fail(str(e))
 
 
+def cmd_bom(args):
+    """Bill of materials: purchased parts grouped by designation, manufactured parts with volume and mass (bom.py)."""
+    from . import bom
+    try:
+        doc = bom.build(args.project, args.density, args.entry, args.merge_identical)
+    except bom.BomError as e:
+        if args.json:
+            print(json.dumps(dict(schema=bom.SCHEMA, error=str(e)), ensure_ascii=False))
+        else:
+            print(f"bom: {e}", file=sys.stderr)
+        return 1
+    if args.out:
+        bom.write(doc, args.out)
+        if not args.json:
+            print(f"written: {args.out}")
+    if args.csv:
+        p = bom.write_csv(doc, args.csv)
+        if not args.json:
+            print(f"written: {p}")
+    if args.json:
+        print(bom.write(doc))
+    elif not args.out:
+        print(bom.text(doc))
+    return 0
+
+
 def cmd_inspect(args):
     """Measured facts about the model or a CAD file as one JSON document (schema soma.inspect/1, inspection.py)."""
     from . import inspection
@@ -640,6 +666,20 @@ def main(argv=None):
     i.add_argument("--project", default=".")
     i.add_argument("--json", action="store_true", help="print the JSON document (the default is a short table)")
     i.set_defaults(func=cmd_inspect)
+
+    bl = sub.add_parser("bom", help="bill of materials: what to buy (grouped by designation) and what to make "
+                                    "(volume, mass)")
+    bl.add_argument("--density", type=float, metavar="G_CM3", help="material density for the mass of the manufactured "
+                                                                   "parts, e.g. 2.7 for aluminium")
+    bl.add_argument("--merge-identical", action="store_true",
+                    help="one line for manufactured parts with the same volume, area and box (a guess: two different "
+                         "parts can share them)")
+    bl.add_argument("--csv", metavar="FILE", help="also write a table for a spreadsheet (UTF-8 with BOM)")
+    bl.add_argument("--out", metavar="FILE", help="write the JSON document to this file as well")
+    bl.add_argument("--entry", help="entry point of the model (default: from project.json, else model.py)")
+    bl.add_argument("--project", default=".")
+    bl.add_argument("--json", action="store_true", help="print the JSON document (the default is two tables)")
+    bl.set_defaults(func=cmd_bom)
 
     m = sub.add_parser("mcp", help="run SOMA as an MCP server over stdio, for coding agents outside the app")
     m.add_argument("--read-only", action="store_true", help="only measuring: no build, no export")

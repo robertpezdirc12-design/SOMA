@@ -89,10 +89,23 @@ Three simplifications to know about:
 
 ## Keeping the parts list
 
-There is no bill-of-materials command yet. `soma inspect --json` gives every standard part with its `designation`
-("ISO 4762 M3x10") and its `group`; heat-set inserts also carry `part_number` from the table. Build the list in
-`NOTES.md` from that output instead of from memory — the same screw written twice in different words is the most
-common mistake in a hand-written parts list.
+`soma bom` writes the list for you, from the model:
+
+```bash
+soma bom                                  # two tables: what to buy, what to make
+soma bom --density 2.7 --csv order.csv    # plus mass and a table for a spreadsheet
+```
+
+Purchased parts are grouped by designation with a count — four screws called "Screw 1".."Screw 4" are one line with
+count 4, because that is what you order. Heat-set inserts carry the manufacturer's `part_number`. Own parts are listed
+with volume, and mass with `--density`.
+
+- Run it before you tell the user what the model needs. A screw that is not from `soma.fasteners` still appears (as
+  "modelled by hand"), but without a designation — which is the sign that it should have been a standard part.
+- `--merge-identical` puts own parts with the same volume, area and box on one line with a count. It is a guess: two
+  different parts can share those numbers. Use it when you know the parts repeat (a bracket used four times).
+- References are not in the list; they are counted separately. `soma inspect --json` shows every part with its
+  `designation`, `group` and `role` if you need the details behind a line.
 
 ## In the model
 

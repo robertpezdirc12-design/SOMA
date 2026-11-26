@@ -41,6 +41,7 @@
     "test:meshexport": "node test/meshexport.mjs",
     "test:inspect": "node test/inspect.mjs",
     "test:mcp": "node test/mcp.mjs",
+    "test:bom": "node test/bom.mjs",
     "help:shots": "npm run build && node test/helpshots.mjs",
     "dist": "npm run build && electron-builder --config electron-builder.config.cjs --publish never",
     "dist:dir": "npm run build && electron-builder --config electron-builder.config.cjs --publish never --dir",

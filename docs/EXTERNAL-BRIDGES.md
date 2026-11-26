@@ -35,11 +35,13 @@ Apache-2.0, declarative `partcad.yaml`, own daemon, own execution environments, 
 **Good for:** part libraries with parameters and interfaces, assemblies and sub-assemblies, materials and BOM,
 reuse of catalogue components, 2.5D CAM, and a documented way to publish and consume CAD packages.
 
-**Overlaps with SOMA:** parametric parts (SOMA: `model.py` + `param()`), assemblies (SOMA: `group=`), BOM (SOMA: none
-yet — see `FASTENERS-INVENTORY.md` G2), FEA (SOMA: `soma analyze fem`).
+**Overlaps with SOMA:** parametric parts (SOMA: `model.py` + `param()`), assemblies (SOMA: `group=`), BOM (SOMA:
+`soma bom`, quantities and designations only), FEA (SOMA: `soma analyze fem`).
 
-**Verdict:** the interesting overlap is **BOM and part libraries**, not geometry. A POC should therefore test exactly
-that, not "can PartCAD open our STEP file" (it can).
+**Verdict:** the interesting overlap is **part libraries and procurement**, not geometry and not quantities. SOMA's
+`soma bom` already produces the quantities from the model (`docs/BOM.md`); what PartCAD adds on top is supply chain,
+make-or-buy decisions and published packages. A POC should therefore test exactly that — not "can PartCAD open our
+STEP file" (it can), and not "can it count screws" (SOMA does).
 
 ### FreeCAD — PartDesign, TechDraw, CAM, FEM
 
@@ -108,9 +110,11 @@ or repaired the geometry. That is a fact to record, not a bug to work around.
 
 Only now test the actual reason:
 
-- **PartCAD:** read a `partcad.yaml` with three parts and one assembly, produce a BOM with quantities and part
-  numbers, compare against a hand-written BOM from `NOTES.md`. Acceptance: same quantities, same designations, and a
-  named part number for every purchased part.
+- **PartCAD:** read a `partcad.yaml` with three parts and one assembly, produce a BOM with quantities, part numbers
+  and a make-or-buy decision, and compare the quantities against `soma bom --json`. Acceptance: same quantities, same
+  designations, and a named part number for every purchased part. **Quantities alone are not a reason to adopt it** —
+  `soma bom` does those. What the POC has to show is the part beyond that: a catalogue component SOMA cannot model,
+  or a supply-chain field that survives.
 - **FreeCAD:** open the assembly, produce a TechDraw sheet with one section and three dimensions, export PDF. Acceptance:
   the dimensions match `soma inspect` within 0.05 mm, and the call does not freeze a window for more than 2 s.
 - **KiCad:** one board STEP through `import_assembly`, clearances cut around it, `soma inspect` shows the board as one
@@ -154,7 +158,7 @@ Shape of the integration, if a POC succeeds:
 |---|---|---|
 | `cq_warehouse` as a dependency | **rejected** | The dimension tables are already in `data/fasteners/` and the geometry is SOMA's own code. See `FASTENERS-INVENTORY.md`. |
 | Official CadQuery MCP server | **rejected as a server, kept as a reference** | It executes a Python string as `code`. SOMA has no sandbox, so that is a second way to run code with the user's rights. Its tool set informed `soma mcp`. |
-| PartCAD | **POC open** | Value is BOM and part libraries, not geometry. §3.1–3.4 not yet run. |
+| PartCAD | **POC open** | Value is part libraries and procurement, not geometry and not quantities (those are `soma bom`). §3.1–3.4 not yet run. |
 | FreeCAD (AnkusDrive) | **POC open** | Only if TechDraw or a missing solver is a real need. §3.1–3.4 not yet run. |
 | FreeCAD (TrailCurrent) | **rejected for automation** | Runs on the GUI thread; a modal dialog blocks every later call. |
 | KiCad Packages3D | **not a bridge** | Manual STEP export into `inputs/` is enough until someone produces boards weekly. |

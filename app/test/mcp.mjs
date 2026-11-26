@@ -73,11 +73,19 @@ const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'soma-mcp-'));
 // print() im Modell: darf das Protokoll nicht kaputt machen
 const MODEL = `import cadquery as cq
 from soma import add_part, param
+from soma.fasteners import Screw, Nut
 
 print("building the probe model")   # absichtlich: der Server muss das nach stderr schicken
 W = param(40.0, "Width", min=20, max=80, unit="mm")
-add_part("Plate", cq.Workplane().box(W, 30, 5).faces(">Z").workplane().hole(4))
-add_part("Lid", cq.Workplane().box(W, 30, 3).translate((0, 0, 8)), group="Housing")
+plate = cq.Workplane().box(W, 30, 5).faces(">Z").workplane().hole(4)
+lid = cq.Workplane().box(W, 30, 3).translate((0, 0, 8))
+for i, x in enumerate((-10, 10), 1):
+    s = Screw("ISO 4762", "M3x10", at=(x, 0), on=lid)
+    plate = plate.cut(s.clearance_hole())
+    add_part(f"Screw {i}", s, group="Hardware")
+add_part("Nut", Nut("ISO 4032", "M3", at=(0, 0, 0), direction="+Z"), group="Hardware")
+add_part("Plate", plate)
+add_part("Lid", lid, group="Housing")
 print("done")
 `;
 
@@ -100,8 +108,8 @@ try {
   // 2) Werkzeugliste
   const list = await client.request('tools/list');
   const tools = list.result?.tools ?? [];
-  check('tools/list: drei Werkzeuge (build, inspect, export)',
-    tools.map((x) => x.name).join() === 'soma_build,soma_inspect,soma_export', tools.map((x) => x.name).join());
+  check('tools/list: vier Werkzeuge (build, inspect, bom, export)',
+    tools.map((x) => x.name).join() === 'soma_build,soma_inspect,soma_bom,soma_export', tools.map((x) => x.name).join());
 
   // 3) Die Sicherheitszusagen, strukturell geprüft
   const FORBIDDEN = ['code', 'script', 'python', 'cmd', 'command', 'exec', 'execute', 'eval', 'shell', 'run',
@@ -119,11 +127,23 @@ try {
   // 4) Messen
   const ins = await client.request('tools/call', { name: 'soma_inspect', arguments: {} });
   const doc = ins.result?.structuredContent;
-  check('soma_inspect: Dokument mit Schema, Volumen und zwei Teilen',
-    ins.result?.isError === false && doc?.schema === 'soma.inspect/1' && doc.totals.parts === 2
-    && Math.abs(doc.parts[0].volume - (40 * 30 * 5 - Math.PI * 4 * 5)) < 0.01, JSON.stringify(doc?.totals));
+  check('soma_inspect: Dokument mit Schema, Volumen und fünf Teilen',
+    ins.result?.isError === false && doc?.schema === 'soma.inspect/1' && doc.totals.parts === 5
+    && Math.abs(doc.parts.find((p) => p.name === 'Lid').volume - 3600) < 0.01, JSON.stringify(doc?.totals));
   check('soma_inspect: Textfassung als content, damit auch ein Agent ohne structuredContent etwas hat',
     /Volume\s+[\d.]+ mm³/.test(ins.result?.content?.[0]?.text ?? ''), (ins.result?.content?.[0]?.text ?? '').slice(0, 60));
+
+  // 4b) Kosovnica: gekaufte Teile nach Oznaka, eigene mit Volumen
+  const bm = await client.request('tools/call', { name: 'soma_bom', arguments: { density: 1.24 } });
+  const bomDoc = bm.result?.structuredContent;
+  check('soma_bom: zwei Schrauben als eine Zeile mit Anzahl 2, Mutter und zwei eigene Teile',
+    bm.result?.isError === false && bomDoc?.schema === 'soma.bom/1' && bomDoc.purchased.length === 2
+    && bomDoc.purchased.find((x) => x.designation === 'ISO 4762 M3x10')?.count === 2
+    && bomDoc.manufactured.length === 2 && bomDoc.totals.purchased === 3,
+    JSON.stringify(bomDoc?.purchased?.map((x) => `${x.designation}x${x.count}`)));
+  check('soma_bom: Masse aus der Dichte, Textfassung mit beiden Tabellen',
+    Math.abs(bomDoc.manufactured.find((x) => x.name === 'Lid').mass_g - 3600 * 1.24 / 1000) < 1e-3
+    && /Purchased parts/.test(bm.result?.content?.[0]?.text ?? ''), String(bomDoc?.manufactured?.[0]?.mass_g));
 
   // 5) Ein Argument, das Code tragen könnte, wird abgelehnt
   const codeArg = await client.request('tools/call', { name: 'soma_inspect', arguments: { code: 'print(1)' } });
@@ -139,8 +159,8 @@ try {
 
   // 6) Bauen (das Modell druckt dabei auf stdout)
   const build = await client.request('tools/call', { name: 'soma_build', arguments: {} });
-  check('soma_build: ok, zwei Teile, kein kaputtes Protokoll trotz print() im Modell',
-    build.result?.isError === false && build.result.structuredContent?.parts?.length === 2 && !client.broken,
+  check('soma_build: ok, fünf Teile, kein kaputtes Protokoll trotz print() im Modell',
+    build.result?.isError === false && build.result.structuredContent?.parts?.length === 5 && !client.broken,
     client.broken ?? build.result?.content?.[0]?.text?.slice(0, 80));
   check('Die Ausgabe des Modells landet auf stderr, nicht im Protokoll', /building the probe model/.test(client.stderr),
     client.stderr.trim().slice(0, 60));
@@ -180,7 +200,7 @@ try {
   ro = new Client(['--project', dir, '--read-only'], dir);
   await ro.request('initialize', { protocolVersion: '2025-06-18', capabilities: {}, clientInfo: { name: 't', version: '1' } });
   const roList = await ro.request('tools/list');
-  check('--read-only: nur soma_inspect in der Liste', (roList.result?.tools ?? []).map((x) => x.name).join() === 'soma_inspect',
+  check('--read-only: nur messende Werkzeuge in der Liste', (roList.result?.tools ?? []).map((x) => x.name).join() === 'soma_inspect,soma_bom',
     (roList.result?.tools ?? []).map((x) => x.name).join());
   const roBuild = await ro.request('tools/call', { name: 'soma_build', arguments: {} });
   check('--read-only: soma_build ist unbekannt (nicht nur verboten)', roBuild.error?.code === -32602,

@@ -3,8 +3,8 @@
     soma mcp --project .              start the server for this model
     soma mcp --project . --read-only  measuring only, no build and no export
 
-An agent that speaks MCP (Codex, Claude Code, Gemini CLI, Cursor, ...) starts this process and gets three tools:
-build the model, measure it, export it. Nothing else.
+An agent that speaks MCP (Codex, Claude Code, Gemini CLI, Cursor, ...) starts this process and gets four tools:
+build the model, measure it, list what it needs, export it. Nothing else.
 
 ## Why this is not the CadQuery MCP server
 
@@ -36,6 +36,10 @@ PROTOCOL = "2025-06-18"
 SUPPORTED = ("2025-06-18", "2025-03-26", "2024-11-05")
 SERVER = "soma"
 
+# Werkzeuge, die nur lesen und messen. Sie laufen im Modus --read-only weiter: sie fuehren model.py aus (das tut
+# `soma build` auch), schreiben aber nichts.
+READ_ONLY_TOOLS = ("soma_inspect", "soma_bom")
+
 # Werkzeuge ohne Argument, das Code, einen Befehl oder einen Pfad traegt. Die Beschreibungen sind absichtlich knapp:
 # sie landen im Kontextfenster des Agenten.
 TOOLS = [
@@ -59,6 +63,18 @@ TOOLS = [
                          description="Material density in g/cm³ for a mass estimate, e.g. 1.24 for PLA, 2.7 for "
                                      "aluminium, 7.85 for steel."),
             fast=dict(type="boolean", description="Skip the validity check (the slow part on freeform geometry)."),
+        ), additionalProperties=False),
+    ),
+    dict(
+        name="soma_bom",
+        description="Bill of materials: what has to be bought, grouped by designation with a count, and what has to "
+                    "be made, with volume. Use it to tell the user what the model needs, or to check that every "
+                    "screw in the design is a standard part.",
+        inputSchema=dict(type="object", properties=dict(
+            density=dict(type="number", exclusiveMinimum=0,
+                         description="Material density in g/cm³ for the mass of the manufactured parts."),
+            merge_identical=dict(type="boolean",
+                                 description="One line for manufactured parts with the same volume, area and box."),
         ), additionalProperties=False),
     ),
     dict(
@@ -173,6 +189,16 @@ def tool_inspect(root, args):
     return inspection.text(doc), doc
 
 
+def tool_bom(root, args):
+    """Kosovnica. Dieselben Zahlen wie `soma bom --json`."""
+    from . import bom
+    try:
+        doc = bom.build(root, args.get("density"), merge_identical=bool(args.get("merge_identical")))
+    except bom.BomError as e:
+        raise McpError(str(e)) from e
+    return bom.text(doc), doc
+
+
 def tool_export(root, args):
     """Exportieren. Ziel ist immer exports/ im Projekt: der Aufrufer kann keinen Pfad waehlen."""
     from . import build, cli, meshexport
@@ -227,7 +253,8 @@ def tool_export(root, args):
     return "\n".join(lines), dict(files=files, warnings=notes)
 
 
-HANDLERS = {"soma_build": tool_build, "soma_inspect": tool_inspect, "soma_export": tool_export}
+HANDLERS = {"soma_build": tool_build, "soma_inspect": tool_inspect, "soma_bom": tool_bom,
+            "soma_export": tool_export}
 
 
 # --- Protokoll ----------------------------------------------------------------------------------------------------------
@@ -241,7 +268,7 @@ class Server:
         self.read_only = read_only
         self.stdin = stdin or sys.stdin
         self.out = stdout or sys.stdout
-        self.tools = [t for t in TOOLS if not read_only or t["name"] == "soma_inspect"]
+        self.tools = [t for t in TOOLS if not read_only or t["name"] in READ_ONLY_TOOLS]
         self.initialized = False
 
     # Ausgabe: immer an den beim Start gemerkten Strom, nie an sys.stdout (das zeigt waehrend eines Werkzeugs nach stderr)
@@ -292,7 +319,7 @@ class Server:
             instructions=(
                 "SOMA builds parametric CAD models from Python (CadQuery). The model is model.py in this folder; "
                 "every part is registered with add_part(name, shape). "
-                + ("This server is read-only: only soma_inspect is available."
+                + ("This server is read-only: only soma_inspect and soma_bom are available."
                    if self.read_only else
                    "Edit model.py, then call soma_build and check the result with soma_inspect before exporting.")
             ),
@@ -379,4 +406,4 @@ def serve(project=".", read_only=False):
 
 def tools_json(read_only=False):
     """Die Werkzeugliste als JSON. Fuer `--print-tools` und den Test, der die Sicherheitsregeln prueft."""
-    return [t for t in TOOLS if not read_only or t["name"] == "soma_inspect"]
+    return [t for t in TOOLS if not read_only or t["name"] in READ_ONLY_TOOLS]
