@@ -30,6 +30,7 @@ the version is bumped.
 - `Washer.trap()`: the round recess for a washer that sits below the surface, the counterpart of `Nut.trap()`.
 - `docs/EXTERNAL-BRIDGES.md`: the decision and the POC procedure for PartCAD, FreeCAD and KiCad, with acceptance numbers and kill criteria, so no bridge is built on a hunch. It also records the rejections: `cq_warehouse` as a dependency, and the official CadQuery MCP server, which runs a Python string and would add a second way to execute code with the user's rights.
 - `docs/DRAFTWRIGHT-HANDOFF.md`: how a Draftwright result (photo, sketch, measurements, product rules) becomes a SOMA model through `inputs/` and `param()` alone — one JSON file with numbers, sources and open questions, no client, no API key, no new dependency.
+- `npm run test:tables`: every row of every standard-parts table is built, not only the rows some other test happens to use — 1235 parts from eight classes, each checked for exactly one valid solid and for the dimensions the table itself claims. It is the test for the class of bug the `68` typo belonged to: a row the geometry cannot build, or whose numbers contradict each other, is invisible until someone happens to ask for that size. It also checks the lists nobody tests while nobody uses them — `standards()` against the registries, every `HINTS` entry against the names that really exist (a hint for a name that resolves can never fire), every `ALIASES` target. About 90 s, so it is a suite of its own rather than part of `test:fasteners`. It found the three heat-set insert bugs below on its first run.
 
 ### Changed
 
@@ -40,6 +41,12 @@ the version is bumped.
 - The "Standard parts" skill documents the three new families with the mistake each one prevents: a clearance hole on a shoulder screw gives a pin that rattles, a retaining ring belongs against a shoulder and not mid-shaft, and the shaft and hub keyways are cut to different depths on purpose.
 - `Nut.trap()` follows the shape of the nut instead of always cutting a hexagon: a flange nut gets a round pocket for its flange with the hexagon above it, a domed cap nut a round pocket up over the dome. A side slot is refused for both with a sentence rather than a slot a flange cannot pass through.
 - The agent's `AGENTS.md` lists `soma inspect`, so a model is checked by measurement after a change instead of by looking at the picture.
+
+### Fixed
+
+- `HeatSetInsert(..., variant=...)` matched the table's variant by substring, so naming `"H2-D3"` also matched `"H2-D3.2"` and the choice stayed ambiguous — the error message told the reader to pass `variant=` and passing it did not help. Nine AE-SamZhihui sizes could not be built at all. An exact match is tried first now and the substring is only the fallback.
+- One row of `heatset_nut_parameters.csv` appears twice with identical numbers (AE-SamZhihui M2.5x8 H8-D4), which made that insert unreachable: two rows with the same dimensions are the same part, so they now count as one.
+- Heat-set insert holes: the drill was read from the inch table only, so a metric drill written in the table (`"M14"`) counted as unknown. And a drill outside thread-to-outer-diameter was reported as "the table gives no usable hole" without saying which of the two things was wrong. Three rows contradict themselves — CNCKitchen M1.6x1.6 names `#39` (2.53 mm) for a 2.5 mm insert, and both M10x12.7 rows name `M14` for a 12.6 mm one — so they are still refused, now with a sentence that says the row contradicts itself rather than leaving the reader to guess.
 
 ## [1.0.0] - 2026-11-22
 

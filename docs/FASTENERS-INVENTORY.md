@@ -253,7 +253,10 @@ the list is done.
    **G4** went the documentation route: the table has no thread length to read.
 6. ~~**G8 (nut and washer variants)**~~ — **done**, except the T-nut, which has no usable table (§G8).
 7. ~~**G7 (O-rings)**~~ — **done** (`ORing`, `gland()`). Three tables, not four: a size table and two gland tables.
-7. **G12–G14** — only against a concrete model that needs them.
+8. ~~**Check the rows, not the standards**~~ — **done** (`npm run test:tables`). Not on the list when this document was
+   written, and it should have been: counting standards said "covered" while single rows were broken. It found three
+   heat-set insert bugs on its first run.
+9. **G12–G14** — only against a concrete model that needs them.
 
 ### Licensing note
 
@@ -280,6 +283,35 @@ grep -o '"[a-z_0-9]*\.csv"' python/soma/fasteners.py | sort -u
 ```
 
 The last command is the one to trust: a CSV can sit in `data/` and be read by nothing.
+
+### Does every row work, or only the ones someone tried?
+
+Coverage counted in standards is not the same as coverage of rows. A table can be present, registered, documented and
+still contain a row that the geometry cannot build — the ISO 1580 length series read `68` instead of `6,8` for as long
+as nobody asked for an M3x8. `npm run test:tables` (`app/test/tables.mjs`) closes that gap: it builds **every row of
+every table** and checks that each one gives exactly one valid solid with the dimensions the table itself claims.
+
+| Class | Rows built |
+|---|---|
+| `Screw` | 211 |
+| `Nut` | 113 |
+| `Washer` | 158 |
+| `RetainingRing` | 174 |
+| `ShaftKey` | 31 |
+| `ORing` | 349 |
+| `Bearing` | 56 |
+| `HeatSetInsert` | 143 |
+| **Total** | **1235** |
+
+Rows it skips are skipped for a stated reason: a row in a shared table that belongs to a different standard (the
+`socket_head_cap_parameters.csv` row is ISO 4762 *or* ASME B18.3, never both), and the imperial rows, which SOMA does
+not offer at all (§G14). Three rows are **refused on purpose** because they contradict themselves — the drill they name
+is larger than the insert's outer diameter — and the suite pins them so a data fix upstream shows up as a failing check
+instead of passing unnoticed.
+
+The same suite also checks the three lists nobody tests while nobody uses them: `standards()` against the registries,
+every `HINTS` entry against the names that really exist (a hint for a name that resolves can never fire), and every
+`ALIASES` target.
 
 ---
 

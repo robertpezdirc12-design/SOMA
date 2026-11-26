@@ -59,8 +59,15 @@ Bekannte Eigenheiten der Daten:
 - Die Werte sind teils Nennmaße, teils Größtmaße (ISO 4762 M3: Kopf 5,68 mm, also das Größtmaß mit Rändelung).
 - Die Bohrungen der Gewindeeinsätze sind Zollbohrer und weichen etwas von den metrischen Richtwerten im Skill
   „3D-Druck“ ab (ruthex M3: 4,04 statt 4,0 mm, M5: 6,53 statt 6,4 mm). Gegen Herstellerblätter geprüft ist das nicht.
-- Für die M10-Einsätze von ruthex und CNC Kitchen steht als Bohrer „M14“, mehr als der Einsatz dick ist. `soma`
-  lehnt diese Einsätze mit einer Meldung ab.
+- Bohrergrößen stehen als Zollgröße („#21", „F") und als metrisches Maß („12", „M14") in der Tabelle; beides wird
+  gelesen. Die Zollgrößen kommen aus `drill_sizes.csv`.
+- Drei Zeilen der Einsatztabelle widersprechen sich selbst: der genannte Bohrer ist größer als der Außendurchmesser
+  des Einsatzes. CNC Kitchen M1.6x1.6 nennt „#39" (2,53 mm) bei 2,5 mm, ruthex und CNC Kitchen M10x12.7 nennen „M14"
+  bei 12,6 mm. Ein Loch, das größer ist als der Einsatz, hält nicht. `soma` baut diese drei nicht, sondern schreibt in
+  die Meldung, dass die Zeile sich widerspricht; `app/test/tables.mjs` führt sie als bekannte Ausnahmen und schlägt
+  an, sobald eine davon eines Tages richtig in der Tabelle steht.
+- Bei AE-SamZhihui steht die Zeile M2.5x8 H8-D4 zweimal, mit identischen Zahlen. Gleiche Maße sind dasselbe Teil,
+  deshalb zählt `soma` sie als eines — sonst wäre die Größe nicht erreichbar, weil zwei Treffer „richtig" sind.
 - Bei ISO 4035 M3 steht die Zeile unter der Steigung 0,45 statt 0,5. `soma` nimmt dann die vorhandene Zeile, denn ohne
   Gewinde zählt nur der Durchmesser.
 - **Eine Zeile wurde korrigiert**, und das ist die einzige Abweichung von „unverändert übernommen": in
@@ -76,6 +83,8 @@ Eigenheiten der Lagertabellen, die den Code bestimmen:
   Dichtsitze. Aus diesen Spalten lässt sich der Kugeldurchmesser also nicht ableiten; `_bearing_local` rechnet die
   Ringe deshalb aus dem radialen Platz und die Kugeln aus der Breite. Gezeichnet ist damit die Hülle, nicht das Innere.
 - Eine Zeile der gedeckelten Tabelle hat keine Bezeichnung (Zeile 8). `_bearing_index` überspringt sie.
+- In der Spalte `SKT:Designation` markiert ein vorangestelltes „* " eine Fußnote der Tabelle („* 625", zwölf Zeilen).
+  `_bearing_index` entfernt es, die Bezeichnung ist „625".
 - Mehrere gedeckelte Lager heißen anders, als man sie bestellt: die Tabelle führt `E2.608-2Z` (SKF Energy Efficient),
   nicht `608-2Z`. `Bearing` rät nicht, sondern schlägt die ähnlichste Bezeichnung vor.
 - Die Tabelle führt die Masse in kg; `Bearing.mass_g` gibt sie in Gramm. Das ist der einzige Wert am Lager, der das

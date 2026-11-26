@@ -151,6 +151,7 @@ HINTS = {
     "din439": "ISO 4035", "din125": "ISO 7089", "din9021": "ISO 7093",
     "din7984": "OpenBuilds (the low profile here is the OpenBuilds series: lower head than DIN 7984, "
                "larger head diameter; model DIN 7984 by hand if its height matters)",
+    # DIN 1665 gibt es hier als Mutter; wer eine Schraube sucht, meint den Bundbolzen DIN 1662
     "din1665": "DIN 1662, the bolt with flange — DIN 1665 is the nut with flange",
     "din6921": "DIN 1662 (same flange head, different width across flats)",
 }
@@ -356,9 +357,14 @@ def _drills():
 
 
 def _drill_mm(code):
-    """Bohrergroesse der Tabelle in mm: Nummern ("#21") und Buchstaben ("F") sind Zollbohrer. Anderes (die Tabelle
-    nennt bei M10 "M14", groesser als der Einsatz) gilt als unbekannt."""
-    return _drills().get(code.strip())
+    """Bohrergroesse der Tabelle in mm: Nummern ("#21") und Buchstaben ("F") sind Zollbohrer (drill_sizes.csv),
+    "12" und "M12" sind metrisch. None heisst: das ist keine Bohrergroesse."""
+    text = code.strip()
+    known = _drills().get(text)
+    if known is not None:
+        return known
+    m = re.fullmatch(r"M?\s*(\d+(?:[.,]\d+)?)", text, re.IGNORECASE)  # "M" allein ist ein Buchstabenbohrer, kein Treffer
+    return _num(m.group(1)) if m else None
 
 
 # --- Lage --------------------------------------------------------------------------------------------------------------
@@ -1052,10 +1058,19 @@ class HeatSetInsert(_Part):
         if length is not None:
             found = [r for r in found if abs(r[3]["m"] - length) < 0.05]
         if variant is not None:
-            found = [r for r in found if str(variant).lower() in r[2].lower()]
+            # Erst genau, dann als Teil: "H2-D3" steckt sonst auch in "H2-D3.2", und die Wahl bliebe mehrdeutig,
+            # obwohl der Aufrufer die Zeile genau benannt hat (AE-SamZhihui hat D3, D3.2 und D3.5 je Laenge)
+            want = re.sub(r"[\s_]", "", str(variant)).lower()
+            exact = [r for r in found if re.sub(r"[\s_]", "", r[2]).lower() == want]
+            found = exact or [r for r in found if want in re.sub(r"[\s_]", "", r[2]).lower()]
         elif len(found) > 1:  # ohne Variante: die Zeile ohne Zusatz ("4.0", nicht "4.0Voron")
             plain = [r for r in found if re.fullmatch(r"\d+(?:\.\d+)?", r[2])]
             found = plain if len(plain) == 1 else found
+        if len(found) > 1:  # dieselbe Zeile doppelt in der Tabelle: gleiche Masse sind dasselbe Teil
+            unique = {}
+            for r in found:
+                unique.setdefault(tuple(sorted(r[3].items())), r)
+            found = list(unique.values())
         if len(found) != 1:
             options = ", ".join(sorted({label(r) for r in rows}))
             what = "no length matches" if not found else "the length is ambiguous"
@@ -1065,9 +1080,16 @@ class HeatSetInsert(_Part):
         self.variant = re.sub(r"^\d+(?:\.\d+)?", "", found[0][2]).strip(" -") or None
         self.diameter, self.length, self.part_number = row["s"], row["m"], row["part"]
         self.hole_diameter = _drill_mm(row["drill"])
-        if self.hole_diameter is None or not self.d < self.hole_diameter < self.diameter:
-            raise ValueError(f"{self.designation}: the table gives no usable hole (drill {row['drill']!r}). "
-                             "Look up the hole at the manufacturer and model the insert yourself")
+        if self.hole_diameter is None:
+            raise ValueError(f"{self.designation}: the table names the drill {row['drill']!r} and that size is not in "
+                             "drill_sizes.csv. Look up the hole at the manufacturer and model the insert yourself")
+        if not self.d < self.hole_diameter < self.diameter:
+            # Drei Zeilen der Tabelle widersprechen sich selbst: CNCKitchen M1.6x1.6 nennt "#39" (2,53 mm) bei 2,5 mm
+            # Aussendurchmesser, die beiden M10x12.7 nennen "M14" bei 12,6 mm. Ein Loch groesser als der Einsatz haelt nicht.
+            raise ValueError(f"{self.designation}: the table's drill {row['drill']!r} is {_fmt(self.hole_diameter)} mm, "
+                             f"which is not between the thread ({_fmt(self.d)} mm) and the outer diameter "
+                             f"({_fmt(self.diameter)} mm) — that row contradicts itself. Look up the hole at the "
+                             "manufacturer and model the insert yourself")
         sink = _sink(sunk, "Heat-set insert")
         self.sunk = sink is not None
         self._place(at, direction, on, angle, sink or 0.0)
