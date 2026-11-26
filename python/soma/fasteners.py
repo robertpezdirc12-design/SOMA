@@ -40,8 +40,8 @@ import cadquery as cq
 from OCP.BRepIntCurveSurface import BRepIntCurveSurface_Inter
 from OCP.gp import gp_Ax1, gp_Dir, gp_Lin, gp_Pnt, gp_Trsf
 
-__all__ = ["Screw", "Nut", "Washer", "HeatSetInsert", "Bearing", "RetainingRing", "ShaftKey", "lengths",
-           "pick_length", "standards"]
+__all__ = ["Screw", "Nut", "Washer", "HeatSetInsert", "Bearing", "RetainingRing", "ShaftKey", "ORing",
+           "lengths", "pick_length", "standards"]
 
 _DATA = Path(__file__).parent / "data" / "fasteners"
 # Tabellen als Text (Dateiname -> CSV). Fuellt nur der Block von "Export as CadQuery" (cqexport.py), dann laeuft dieses
@@ -295,7 +295,8 @@ def pick_length(standard, size, min_length, max_length=None):
 def standards():
     """What is available: {"screws": {"ISO 4762": "Socket head cap screw", ...}, "nuts": ..., "washers": ...,
     "heat_set_inserts": [brands], "bearings": {"Deep groove ball bearing": ..., ...},
-    "retaining_rings": {"DIN 471": "Retaining ring for shafts", ...}, "shaft_keys": {"DIN 6885": ...}}."""
+    "retaining_rings": {"DIN 471": "Retaining ring for shafts", ...}, "shaft_keys": {"DIN 6885": ...},
+    "o_rings": {"ISO 3601": "O-ring, class A"}}."""
     return {
         "screws": {v["name"]: v["title"] for v in SCREWS.values()},
         "nuts": {v["name"]: v["title"] for v in NUTS.values()},
@@ -304,6 +305,7 @@ def standards():
         "bearings": {v["name"]: v["title"] for v in BEARINGS.values()},
         "retaining_rings": {v["name"]: v["title"] for v in RETAINING_RINGS.values()},
         "shaft_keys": {v["name"]: v["title"] for v in SHAFT_KEYS.values()},
+        "o_rings": {v["name"]: v["title"] for v in O_RINGS.values()},
     }
 
 
@@ -1232,6 +1234,216 @@ class ShaftKey(_Part):
             tool = cq.Workplane("XY").slot2D(length, w).extrude(deep).translate((0, 0, -deep)).val()
         else:
             tool = _box(-length / 2, length / 2, -w / 2, w / 2, -deep, 0.0)
+        return self._world(tool)
+
+
+# --- O-Ringe -----------------------------------------------------------------------------------------------------------
+
+O_RINGS = {"iso3601": dict(name="ISO 3601", title="O-ring, class A", table="o-ring_parameters.csv", col="iso3601")}
+
+# Zwei Nutentabellen nach Schnurdicke: statisch mit radialer und axialer Einfederung, dynamisch nur radial.
+GLANDS = {
+    "static": dict(table="o-ring_static_gland_parameters.csv", radial=("d_r_min", "d_r_max"),
+                   axial=("d_a_min", "d_a_max"), squeeze=("sq_r_mm_min", "sq_r_mm_max"),
+                   percent=("sq_r_p_min", "sq_r_p_max")),
+    "dynamic": dict(table="o-ring_dynamic_gland_parameters.csv", radial=("d_min", "d_max"), axial=None,
+                    squeeze=("sq_mm_min", "sq_mm_max"), percent=("sq_p_min", "sq_p_max")),
+}
+
+
+@functools.cache
+def _gland_rows(table):
+    """Nutentabelle nach Schnurdicke: {w: {spalte: zahl oder None}}. "-" heisst: gibt es fuer diese Schnur nicht."""
+    out = {}
+    for key, row in _table(table):
+        out[round(_num(key), 3)] = {name: None if text in ("-", "") else _num(text) for name, text in row.items()}
+    return out
+
+
+@functools.cache
+def _oring_index():
+    """Groessen ("025") -> Maße, und Schnurdicke -> [(Innendurchmesser, Groesse)] nach Durchmesser sortiert."""
+    spec = O_RINGS["iso3601"]
+    by_size, by_width = {}, {}
+    for key, row in _table(spec["table"]):
+        try:
+            vals = {c: _num(row[f"{spec['col']}:{c}"]) for c in ("id", "w", "id_tol", "w_tol")}
+        except (KeyError, ValueError):
+            continue
+        size = key.removeprefix("-").strip().zfill(3)
+        by_size[size] = vals
+        by_width.setdefault(vals["w"], []).append((vals["id"], size))
+    for entries in by_width.values():
+        entries.sort()
+    return by_size, by_width
+
+
+def _groove_local(inner, outer, z0, z1, fillet=0.0, floor="inner"):
+    """Ringfoermige Nut als Koerper: von Radius `inner` bis `outer`, von z0 bis z1.
+
+    floor  "inner" oder "outer": die Nutgrundflaeche liegt innen oder aussen, gerundet werden dort beide Ecken;
+           "z0": der Grund ist die Ebene z0, gerundet werden die beiden Ecken auf ihr. So entsteht ein Werkzeug,
+           das eine Nut mit gerundetem Grund schneidet — scharfe Ecken kerben den Ring ein.
+    """
+    if floor not in ("inner", "outer", "z0"):
+        raise ValueError(f"Unknown groove floor {floor!r}")
+    f = 0.0 if not fillet else max(min(fillet, (outer - inner) / 3, (z1 - z0) / 3), 0.0)
+    w = cq.Workplane("XZ")
+    if f <= 1e-9:
+        w = w.moveTo(inner, z0).lineTo(outer, z0).lineTo(outer, z1).lineTo(inner, z1).close()
+    elif floor == "inner":
+        w = (w.moveTo(inner + f, z0).lineTo(outer, z0).lineTo(outer, z1).lineTo(inner + f, z1)
+             .radiusArc((inner, z1 - f), -f).lineTo(inner, z0 + f).radiusArc((inner + f, z0), -f).close())
+    elif floor == "outer":
+        w = (w.moveTo(inner, z0).lineTo(outer - f, z0).radiusArc((outer, z0 + f), -f)
+             .lineTo(outer, z1 - f).radiusArc((outer - f, z1), -f).lineTo(inner, z1).close())
+    else:
+        w = (w.moveTo(inner, z0 + f).radiusArc((inner + f, z0), -f).lineTo(outer - f, z0)
+             .radiusArc((outer, z0 + f), -f).lineTo(outer, z1).lineTo(inner, z1).close())
+    return w.revolve(360, (0, 0, 0), (0, 1, 0)).val()
+
+
+class ORing(_Part):
+    """O-Ring. ORing("025", at=(x, y, z)): der Ring liegt mit seiner Mittelebene in `at`, +Z zeigt aus dem Material,
+    also steht die eine Haelfte heraus. So steht der Ring in der Nut, die `gland()` schneidet.
+
+    size   Groesse nach ISO 3601, dreistellig ("025", auch 25 oder "-025"). Das ist eine Groessennummer, **kein
+           Durchmesser** — 025 hat 29,87 mm Innendurchmesser, 020 nur 21,95 mm. Welche Groesse zu einem Durchmesser
+           passt, sagt `for_inner_diameter()`.
+    at     Mitte des Ringes (Mittelebene), (x, y, z) oder cq.Location
+    """
+
+    def __init__(self, size, *, at=None, direction=None, on=None, angle=0.0):
+        self.standard_key = "iso3601"
+        self.standard = O_RINGS[self.standard_key]["name"]
+        self.size = self._normalize(size)
+        by_size, _ = _oring_index()
+        self.dims = by_size[self.size]
+        self.inner_diameter, self.width = self.dims["id"], self.dims["w"]
+        self._place(at, direction, on, angle, 0.0)
+
+    @staticmethod
+    def _normalize(size):
+        text = str(size).strip().removeprefix("-").strip()
+        by_size, _ = _oring_index()
+        if text.isdigit() and text.zfill(3) in by_size:
+            return text.zfill(3)
+        raise ValueError(f"O-ring size {size!r}: a three-digit ISO 3601 size code such as \"025\", not a diameter. "
+                         f"Sizes run from {min(by_size)} to {max(by_size)}; for a diameter use "
+                         f"ORing.for_inner_diameter()")
+
+    @classmethod
+    def for_inner_diameter(cls, diameter, width=None, tolerance=0.05):
+        """Groessen, deren Innendurchmesser `diameter` entspricht (± tolerance relativ), als Liste von Codes.
+
+        width  Schnurdicke in mm, etwa 1.78 fuer duenne und 2.62 fuer kraeftige Ringe; ohne Angabe alle Schnuere
+        """
+        if not isinstance(diameter, numbers.Real) or diameter <= 0:
+            raise ValueError(f"for_inner_diameter: diameter in mm, not {diameter!r}")
+        if tolerance < 0:
+            raise ValueError(f"for_inner_diameter: tolerance is a fraction, not {tolerance!r}")
+        _, by_width = _oring_index()
+        found = []
+        for w, entries in sorted(by_width.items()):
+            if width is not None and abs(w - width) > 1e-6:
+                continue
+            found.extend(size for inner, size in entries if abs(inner - diameter) <= tolerance * diameter)
+        if not found:
+            raise ValueError(f"for_inner_diameter: no O-ring with {diameter} mm inner diameter"
+                             + (f" and {width} mm cord" if width is not None else ""))
+        return found
+
+    @property
+    def designation(self):
+        return f"{self.standard} {self.size} {_fmt(self.inner_diameter)}x{_fmt(self.width)}"
+
+    @property
+    def dash_number(self):
+        """Groesse nach ISO 3601, dreistellig."""
+        return self.size
+
+    @property
+    def outer_diameter(self):
+        return self.inner_diameter + 2 * self.width
+
+    @property
+    def major_radius(self):
+        return (self.inner_diameter + self.width) / 2
+
+    @property
+    def minor_radius(self):
+        return self.width / 2
+
+    @property
+    def length(self):
+        """Laenge der Mittellinie: was der Ring im eingebauten Zustand umschliesst."""
+        return 2 * math.pi * self.major_radius
+
+    @property
+    def outer(self):
+        return self._local_point(self.minor_radius)
+
+    def _local(self):
+        return cq.Solid.makeTorus(self.major_radius, self.minor_radius)
+
+    def gland_spec(self, kind="shaft", application="static", backing_rings=0):
+        """Die Maße der Nut als dict: width, depth (Mittel), depth_min, depth_max, radius, clearance, squeeze_*.
+
+        kind         "shaft" (Nut in der Welle), "bore" (Nut in der Bohrung), "face" (Nuten in einer Stirnflaeche)
+        application  "static" oder "dynamic"; dynamisch gibt es nur die radiale Nut
+        backing_rings  0, 1 oder 2 Stuetzringe — fuer duenne Schnuere gibt es sie nicht
+        """
+        if kind not in ("shaft", "bore", "face"):
+            raise ValueError(f"gland: kind is \"shaft\", \"bore\" or \"face\", not {kind!r}")
+        if application not in GLANDS:
+            raise ValueError(f"gland: application is \"static\" or \"dynamic\", not {application!r}")
+        if backing_rings not in (0, 1, 2):
+            raise ValueError(f"gland: backing_rings is 0, 1 or 2, not {backing_rings!r}")
+        spec = GLANDS[application]
+        if kind == "face" and spec["axial"] is None:
+            raise ValueError(f"gland: the {application} table has no axial gland, only a radial one. "
+                             "A face seal is a static gland")
+        try:
+            row = _gland_rows(spec["table"])[round(self.width, 3)]
+        except KeyError:
+            raise ValueError(f"gland: no {application} gland for a {self.width} mm cord. The table has "
+                             f"{', '.join(_fmt(w) for w in sorted(_gland_rows(spec['table'])))}") from None
+        width = row[f"g_w_{backing_rings}"]
+        if width is None:
+            many = "backing ring" if backing_rings == 1 else "backing rings"
+            raise ValueError(f"gland: {backing_rings} {many} are not possible with a {self.width} mm cord; "
+                             "the table gives them from 1.78 mm")
+        low, high = spec["axial"] if kind == "face" else spec["radial"]
+        squeeze = spec["squeeze"] if kind != "face" else ("sq_a_mm_min", "sq_a_mm_max")
+        percent = spec["percent"] if kind != "face" else ("sq_a_p_min", "sq_a_p_max")
+        return dict(width=width, depth_min=row[low], depth_max=row[high],
+                    depth=(row[low] + row[high]) / 2, radius=(row["g_r_min"] + row["g_r_max"]) / 2,
+                    radius_min=row["g_r_min"], radius_max=row["g_r_max"], clearance=row["clr_max"],
+                    squeeze_min=row[squeeze[0]], squeeze_max=row[squeeze[1]],
+                    squeeze_percent_min=row[percent[0]], squeeze_percent_max=row[percent[1]])
+
+    def gland(self, kind="shaft", application="static", backing_rings=0, oversize=0.0):
+        """Werkzeug fuer cut(): die Nut zum Ring, an derselben Stelle und in derselben Richtung wie der Ring.
+
+        Die Nut liegt mittig zum Ring, ihre Tiefe und Breite kommen aus der Tabelle. Fuer "shaft" ist der
+        Nutgrund der Innendurchmesser des Ringes, die Welle also `inner_diameter + 2 x depth`; fuer "bore" ist
+        die Bohrung der Aussendurchmesser und der Grund liegt `depth` tiefer. Fuer "face" liegt der Grund auf
+        der Unterseite des Ringes, die Dichtflaeche `depth` darueber.
+
+        oversize  auf Breite und Tiefe addiert (3D-Druck: eine Nut wird enger)
+        """
+        spec = self.gland_spec(kind, application, backing_rings)
+        width, depth = spec["width"] + oversize, spec["depth"] + oversize
+        r = self.major_radius
+        if kind == "shaft":
+            tool = _groove_local(self.inner_diameter / 2, self.inner_diameter / 2 + depth + MARGIN,
+                                 -width / 2, width / 2, spec["radius"], "inner")
+        elif kind == "bore":
+            tool = _groove_local(self.outer_diameter / 2 - MARGIN, self.outer_diameter / 2 + depth,
+                                 -width / 2, width / 2, spec["radius"], "outer")
+        else:
+            tool = _groove_local(r - width / 2, r + width / 2, -self.minor_radius,
+                                 -self.minor_radius + depth + MARGIN, spec["radius"], "z0")
         return self._world(tool)
 
 

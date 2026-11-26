@@ -55,16 +55,16 @@ hole it needs come from the same table row, so they cannot drift apart.
 | Deep-groove ball bearing | 56 catalogue numbers, open and capped, bore 3–10 mm |
 | Retaining ring | DIN 471 (shaft), DIN 472 (bore) |
 | Parallel key | DIN 6885 form A |
+| O-ring | ISO 3601, 349 sizes, eight cords, with the groove for shaft, bore and face seals |
 
 ### 1.3 Data tables
 
-26 of the 42 files in `bd_warehouse/src/bd_warehouse/data/` are present, and every one of them is read by the
-module. The copy is lean, not accidental: what is missing falls into three groups.
+29 of the 42 files in `bd_warehouse/src/bd_warehouse/data/` are present, and every one of them is read by the
+module. The copy is lean, not accidental: what is missing falls into two groups.
 
 | Missing | Why |
 |---|---|
 | three bearing tables (angular contact, cylindrical roller, tapered roller) | No code reads them — see G1a |
-| `o-ring_parameters.csv` and the gland tables | G7, not built yet |
 | `hex_head_with_flange_parameters.csv`, `brad_tee_nut_parameters.csv`, `imperial_set_screw_parameters.csv`, `metric_set_screw_parameters.csv` | No part needs them yet; the T-nut table is unusable (see G8) |
 
 `drill_sizes.csv` is present but only used to resolve heat-set insert holes (`_drill_mm`).
@@ -134,8 +134,25 @@ The table's two depth columns were the open question: `t4` is the shaft groove a
 against all 31 rows — `t2 + t4` is always `h` plus 0.2 to 0.3 mm of clearance, and the assignment matches DIN 6885 for
 the 2×2, 3×3 and 8×7 keys.
 
-**G7. O-rings.** Four tables (sizes, static gland, dynamic gland). The gland dimensions are the valuable part: a
-correct O-ring groove is hard to get right by hand, and SOMA already has the cut-tool pattern to express it.
+**G7. O-rings.** ✅ **Done.** `ORing("025", at=...)`, 349 sizes from 001 to 475 and eight cord thicknesses, plus
+`gland()` for the groove. Three tables, not four: a size table and two gland tables (static and dynamic), which is what
+upstream has.
+
+The size is the ISO 3601 dash number, **not a diameter** — 025 is 29.87 mm inside, 020 is 21.95 — so
+`for_inner_diameter(30, 1.78)` answers the question a designer actually asks, and a size that does not exist is
+rejected with that sentence rather than silently becoming another ring. The part is a torus at its nominal dimensions;
+the 1–5 % stretch of a real installation is not modelled, and the docstring says so.
+
+`gland(kind="shaft"|"bore"|"face", application="static"|"dynamic", backing_rings=0)` cuts the groove so that it and the
+ring cannot disagree: for a shaft seal the groove floor *is* the ring's inner diameter, for a bore seal the bore *is*
+its outer diameter, and for a face seal the groove floor is the ring's underside. Width and depth come from the gland
+tables by cord thickness, the depth as the average of the table's min and max, and the groove floor is rounded with the
+table's corner radius — a sharp corner cuts the ring. `gland_spec()` returns the numbers behind the tool (width, depth
+range, radius, clearance, squeeze in mm and %) for a drawing or a check.
+
+Two honest limits, both stated in `QUELLE.md`: the gland dimensions are the Apple Rubber design guide, not ISO 3601-2 —
+bd_warehouse says so itself — and `backing_rings=1|2` is refused for cords under 1.78 mm, where the table has no width
+for them.
 
 **G8. Nut and washer variants.** ✅ **Done, except the T-nut.** `Nut` gains `"DIN 1665"` (hex with flange) and
 `"DIN 1587"` (domed cap nut), `Washer` gains `"ISO 7090"` (chamfered) and `"DIN 6797"` (internal-tooth lock washer).
@@ -198,7 +215,8 @@ This is worth stating once in the `standard-parts` skill so agents stop "improvi
 | "Do not duplicate functionality" | Confirmed: importing `cq_warehouse` would duplicate all four classes. |
 | Runtime change | **None needed.** New families are new modules in `python/soma/`, reading new CSVs from the same `data/fasteners/` folder under the same Apache-2.0 notice. No new pip dependency. |
 
-Status: G1, G2, G3, G4, G5, G6, G8, G9, G10 and G11 are implemented. G7 and the rest are open, in the order below.
+Status: G1, G2, G3, G4, G5, G6, G7, G8, G9, G10 and G11 are implemented. G1a and G12 to G14 are open — the rest of
+the list is done.
 
 ### Recommended order
 
@@ -212,7 +230,7 @@ Status: G1, G2, G3, G4, G5, G6, G8, G9, G10 and G11 are implemented. G7 and the 
 5. ~~**G9, G10, G11**~~ — **done**. Small, and each one removed a way to get a wrong number or a misleading error.
    **G4** went the documentation route: the table has no thread length to read.
 6. ~~**G8 (nut and washer variants)**~~ — **done**, except the T-nut, which has no usable table (§G8).
-7. **G7 (O-rings)** — the one family still missing. Four tables, and the gland dimensions are the part worth having.
+7. ~~**G7 (O-rings)**~~ — **done** (`ORing`, `gland()`). Three tables, not four: a size table and two gland tables.
 7. **G12–G14** — only against a concrete model that needs them.
 
 ### Licensing note

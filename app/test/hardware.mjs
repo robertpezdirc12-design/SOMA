@@ -21,7 +21,7 @@ const LIB_CHECKS = String.raw`
 import json
 import math
 import cadquery as cq
-from soma.fasteners import Screw, Nut, Washer, RetainingRing, ShaftKey, lengths, standards, _plain_rows
+from soma.fasteners import Screw, Nut, Washer, RetainingRing, ShaftKey, ORing, lengths, standards, _plain_rows
 
 COS30 = math.cos(math.radians(30))
 
@@ -214,6 +214,64 @@ out("DIN 6797 M3: %d Innenzaehne, die in die Bohrung greifen" % tw.dims["n"],
     and len(teeth.Solids()) == int(tw.dims["n"]) and teeth.Volume() > 0.1,
     (len(teeth.Solids()), round(teeth.Volume(), 3)))
 
+# --- G7: O-Ringe -------------------------------------------------------------------------------------------------------
+
+o = ORing("025", at=(0, 0, 0))
+box = bb(o.shape)
+torus = 2 * math.pi ** 2 * o.major_radius * o.minor_radius ** 2
+out("O-Ring 025: ein Koerper, Mittelebene in at, Aussen- und Innendurchmesser aus der Tabelle",
+    len(o.shape.Solids()) == 1 and o.shape.isValid()
+    and near(box[1] - box[0], o.outer_diameter, 0.02) and near(box[5], o.width / 2, 1e-6)
+    and near(box[4], -o.width / 2, 1e-6) and near(o.shape.Volume(), torus, 0.02 * torus),
+    (round(box[1] - box[0], 2), round(box[4], 2), round(box[5], 2), round(o.shape.Volume(), 1)))
+
+out("Die Groesse ist eine Nummer, kein Durchmesser: 12.5 wird abgelehnt, 25 zu 025",
+    raises(lambda: ORing("12.5", at=(0, 0, 0))) and ORing(25, at=(0, 0, 0)).dash_number == "025"
+    and ORing("-025", at=(0, 0, 0)).dash_number == "025")
+
+sizes = ORing.for_inner_diameter(30, 1.78)
+out("for_inner_diameter(30, 1.78) findet 025 und 026 — die Nummer allein sagt das nicht",
+    sizes == ["025", "026"] and near(ORing(sizes[0], at=(0, 0, 0)).inner_diameter, 29.87, 1e-9)
+    and near(ORing(sizes[1], at=(0, 0, 0)).inner_diameter, 31.47, 1e-9), sizes)
+
+spec = o.gland_spec("shaft")
+out("Nutmaße: Breite aus der Tabelle, Tiefe als Mittel von min und max, Radius als Mittel von min und max",
+    near(spec["width"], 2.41, 1e-9) and near(spec["depth"], (1.27 + 1.4) / 2, 1e-9)
+    and near(spec["radius"], (0.13 + 0.38) / 2, 1e-9) and near(spec["squeeze_max"], 0.58, 1e-9),
+    (spec["width"], round(spec["depth"], 3), round(spec["radius"], 3)))
+
+shaft = cq.Workplane().circle(o.inner_diameter / 2 + spec["depth"]).extrude(20).translate((0, 0, -10)).val()
+cut = shaft.cut(o.gland("shaft"))
+wall = cq.Solid.makeBox(0.04, 0.04, 0.04, cq.Vector(o.inner_diameter / 2 + 0.2, -0.02, -0.02))
+out("Nut in der Welle: Grund ist der Innendurchmesser des Ringes, die Welle ist um die Tiefe dicker",
+    near(dia_at(cut, 0.0), o.inner_diameter, 0.01)
+    and near(dia_at(cut, 5.0), o.inner_diameter + 2 * spec["depth"], 0.01)
+    and cut.intersect(wall).Volume() < 1e-6 and near(bb(o.gland("shaft"))[5] - bb(o.gland("shaft"))[4], spec["width"], 1e-6),
+    (round(dia_at(cut, 0.0), 2), round(dia_at(cut, 5.0), 2)))
+
+housing = cq.Workplane().circle(25).circle(o.outer_diameter / 2).extrude(20).translate((0, 0, -10)).val()
+bore = housing.cut(o.gland("bore"))
+inside = cq.Solid.makeBox(0.04, 0.04, 0.04, cq.Vector(o.outer_diameter / 2 + 0.2, -0.02, -0.02))
+outside = cq.Solid.makeBox(0.04, 0.04, 0.04, cq.Vector(o.outer_diameter / 2 + 0.2, -0.02, 5.0))
+out("Nut in der Bohrung: Grund liegt um die Tiefe hinter dem Aussendurchmesser",
+    bore.intersect(inside).Volume() < 1e-6 and bore.intersect(outside).Volume() > 1e-9
+    and len(bore.Solids()) == 1,
+    (round(bore.intersect(inside).Volume(), 6), round(bore.intersect(outside).Volume(), 6)))
+
+plate = cq.Workplane().circle(25).extrude(10).translate((0, 0, -10)).val()
+face = plate.cut(o.gland("face"))
+deep = cq.Solid.makeBox(0.04, 0.04, 0.04, cq.Vector(o.major_radius - 0.02, -0.02, -0.3))
+floor = cq.Solid.makeBox(0.04, 0.04, 0.04, cq.Vector(o.major_radius - 0.02, -0.02, -o.width / 2 - 0.3))
+out("Nut in der Stirnflaeche: Grund auf der Unterseite des Ringes, Dichtflaeche eine Tiefe darueber",
+    near(bb(o.gland("face"))[5], -o.width / 2 + o.gland_spec("face")["depth"] + 1.0, 1e-6)
+    and face.intersect(deep).Volume() < 1e-6 and face.intersect(floor).Volume() > 1e-9,
+    (round(bb(o.gland("face"))[5], 3), round(face.intersect(deep).Volume(), 6)))
+
+out("Stuetzringe und Stirnflaechennuten werden abgelehnt, wo die Tabelle sie nicht kennt",
+    raises(lambda: ORing("001", at=(0, 0, 0)).gland(backing_rings=1))
+    and ORing("025", at=(0, 0, 0)).gland_spec(backing_rings=2)["width"] > o.gland_spec()["width"]
+    and raises(lambda: o.gland("face", "dynamic")) and raises(lambda: o.gland("piston")))
+
 # --- G9, G10, G11, G4: Werkzeuge und Meldungen -------------------------------------------------------------
 
 s6 = Screw("ISO 4762", "M6x20", at=(0, 0, 0))
@@ -253,13 +311,13 @@ out("standards() nennt die neuen Familien",
 out("standards() kennt auch die Varianten: Schlitzkopf, Bund- und Hutmutter, Fasen- und Zahnscheibe",
     "ISO 1580" in st["screws"] and "ISO 1207" in st["screws"]
     and "DIN 1665" in st["nuts"] and "DIN 1587" in st["nuts"]
-    and "ISO 7090" in st["washers"] and "DIN 6797" in st["washers"],
+    and "ISO 7090" in st["washers"] and "DIN 6797" in st["washers"] and "ISO 3601" in st["o_rings"],
     (sorted(st["nuts"]), sorted(st["washers"])))
 `;
 
 const MODEL = `import cadquery as cq
 from soma import add_part
-from soma.fasteners import Screw, Nut, Washer, RetainingRing, ShaftKey
+from soma.fasteners import Screw, Nut, Washer, RetainingRing, ShaftKey, ORing
 
 add_part("Shaft", cq.Workplane().circle(10).extrude(60))
 add_part("Ring", RetainingRing("DIN 471", 20, at=(0, 0, 55)))
@@ -268,6 +326,7 @@ add_part("Pin", Screw("ISO 7379", "M6x25", at=(30, 0, 0), direction="+Z"))
 add_part("Screw", Screw("OpenBuilds", "M5x15", at=(-30, 0, 0), direction="+Z"))
 add_part("FlangeNut", Nut("DIN 1665", "M8", at=(0, -30, 0), direction="+Z"))
 add_part("LockWasher", Washer("DIN 6797", "M8", at=(0, 30, 0), direction="+Z"))
+add_part("Seal", ORing("019", at=(0, 0, 80)))
 `;
 
 const lib = spawnSync(PY, ['-c', LIB_CHECKS], { encoding: 'utf8', env: { ...process.env, PYTHONIOENCODING: 'utf-8' } });
@@ -276,7 +335,7 @@ for (const line of lines) {
   const [label, ok, detail] = JSON.parse(line);
   check(label, ok, detail);
 }
-check('Python-Prüfungen liefen durch', lib.status === 0 && lines.length >= 32,
+check('Python-Prüfungen liefen durch', lib.status === 0 && lines.length >= 40,
   lib.status === 0 ? `${lines.length} Prüfungen` : (lib.stderr ?? '').slice(-300));
 
 const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'soma-hardware-'));
@@ -293,9 +352,9 @@ try {
       && screws.join(' | ') === 'ISO 7379 M6x25 | OpenBuilds M5x15',
     JSON.stringify(doc?.purchased ?? bom.stderr.slice(-150)));
 
-  check('Kosovnica: Bundmutter und Zahnscheibe sind eigene Zeilen, nicht als Schraube gezaehlt',
+  check('Kosovnica: Bundmutter, Zahnscheibe und O-Ring sind eigene Zeilen, nicht als Schraube gezaehlt',
     line('Nut')?.designation === 'DIN 1665 M8' && line('Washer')?.designation === 'DIN 6797 M8'
-      && (doc?.purchased ?? []).length === 6,
+      && line('ORing')?.designation === 'ISO 3601 019 20.35x1.78' && (doc?.purchased ?? []).length === 7,
     JSON.stringify((doc?.purchased ?? []).map((p) => `${p.kind}:${p.designation}`)));
 
   const insp = py(['inspect', '--json', '--project', dir]);

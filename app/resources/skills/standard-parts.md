@@ -1,12 +1,12 @@
 ---
 title: Standard parts
 name: Standard parts
-summary: Screws, nuts, washers, threaded inserts, ball bearings, retaining rings and shaft keys from soma.fasteners with matching holes, nut traps, grooves, keyways, seats, dowel pins and aluminium extrusions.
+summary: Screws, nuts, washers, threaded inserts, ball bearings, retaining rings, shaft keys and O-rings from soma.fasteners with matching holes, nut traps, grooves, keyways, gland grooves, seats, dowel pins and aluminium extrusions.
 order: 22
 category: Design knowledge
 default: always
-when: the model needs screws, nuts, washers, threaded inserts, bearings, retaining rings, shaft keys, dowel pins or profiles
-topics: Screws, nuts, washers and inserts with soma.fasteners; Position and holes; Nut traps; Ball bearings; Retaining rings and shaft keys; Shoulder screws; Pins and profiles; Standard parts in the model
+when: the model needs screws, nuts, washers, threaded inserts, bearings, retaining rings, shaft keys, O-rings, dowel pins or profiles
+topics: Screws, nuts, washers and inserts with soma.fasteners; Position and holes; Nut traps; Ball bearings; Retaining rings and shaft keys; O-rings and their grooves; Shoulder screws; Pins and profiles; Standard parts in the model
 ---
 # Skill: Standard parts
 
@@ -150,6 +150,30 @@ hub = hub.cut(key.keyway("hub"))              # broached, square ends, 2.8 mm de
 - `keyway("shaft")` has rounded ends because it is milled with an end mill; `keyway("hub")` is square because it is
   broached. Both sit at the same `at` and `direction`, so the shaft and the hub line up.
 
+## O-rings: `ORing("025", ...)` and its groove
+
+```python
+from soma.fasteners import ORing
+
+o = ORing("019", at=(0, 0, SEAL_Z))          # mid-plane of the ring in `at`, on the axis
+shaft = shaft.cut(o.gland("shaft"))           # groove: floor is the ring's inner diameter
+add_part("Seal", o, group="Hardware")
+```
+
+- **The size is a number, not a diameter.** 019 has 20.35 mm inside, 025 has 29.87 — asking for a diameter is the
+  classic mistake. `ORing.for_inner_diameter(20, 1.78)` gives the codes that fit, one per cord thickness.
+- `gland(kind="shaft")` cuts into a shaft of `inner_diameter + 2 × depth`, `"bore"` into a bore of the outer diameter,
+  `"face"` into a flat face. In all three the groove and the ring are positioned from the same numbers, so they cannot
+  disagree: the floor is the ring's inner diameter, the bore is its outer diameter, the face groove floor is its
+  underside.
+- Width and depth come from the gland table by cord thickness: `o.gland_spec("shaft")` returns `width`, `depth` (the
+  average of the table's min and max), `radius` at the groove floor, `clearance` and the squeeze in mm and percent.
+  `application="dynamic"` is for a moving seal and has a radial groove only.
+- The gland dimensions are the Apple Rubber design guide, not ISO 3601-2 — a starting point, and worth checking against
+  the seal supplier when the pressure is high.
+- A model shows the ring uncompressed; a real one is stretched 1–5 % onto the shaft. That does not change the groove,
+  but it is why the ring in the picture looks slightly proud.
+
 ## Pins and profiles
 
 - Dowel pins ISO 8734 (m6): Ø 2, 3, 4, 5, 6, 8 mm, lengths 6, 8, 10, 12, 16, 20 mm and more. Holes H7.
@@ -162,11 +186,12 @@ Covered: screws ISO 4762, 7380, 10642, 4017, 4014, DIN 931, 4026, 7379 (shoulder
 head) and the OpenBuilds low profile series; nuts ISO 4032, 4033, 4035, DIN 557, DIN 1665 (flange), DIN 1587 (domed
 cap); washers ISO 7089, 7091, 7093, 7090 (chamfered), DIN 6797 (internal teeth); heat-set inserts from five makers;
 deep-groove ball bearings from 3 to 10 mm bore, open and capped; retaining rings DIN 471 and DIN 472 for shafts and
-bores from 3 to 300 mm; parallel keys DIN 6885 for shafts from 6 to 50 mm; and the clearance holes, tap drills,
-counterbores, nut traps, insert holes, grooves and keyways that go with them. Nothing else.
+bores from 3 to 300 mm; parallel keys DIN 6885 for shafts from 6 to 50 mm; O-rings ISO 3601 in 349 sizes with the
+groove for shaft, bore and face seals; and the clearance holes, tap drills, counterbores, nut traps, insert holes,
+grooves, keyways and gland grooves that go with them. Nothing else.
 
-Not covered, model by hand (with `role="hardware"`): roller and angular-contact bearings, dowel pins, O-rings, gears,
-sprockets, pulleys, springs, T-nuts, unchamfered hex nuts, imperial fasteners. Ask before inventing dimensions; the
+Not covered, model by hand (with `role="hardware"`): roller and angular-contact bearings, dowel pins, gears,
+sprockets, pulleys, springs, T-nuts, unchamfered hex nuts, lip seals and shaft seals, imperial fasteners. Ask before inventing dimensions; the
 sizes in this skill are a starting point, not a catalogue.
 
 Three simplifications to know about:

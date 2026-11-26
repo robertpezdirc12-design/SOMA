@@ -36,6 +36,9 @@ Verwendet von `soma/fasteners.py`. Der Code dort ist eigener Code und übernimmt
 | `din471.csv` | Sprengringe für Wellen |
 | `din472.csv` | Sprengringe für Bohrungen |
 | `shaft_key_parameters.csv` | Passfedern DIN 6885 |
+| `o-ring_parameters.csv` | O-Ringe ISO 3601, Größen 001 bis 475, acht Schnurdicken |
+| `o-ring_static_gland_parameters.csv` | Nut für statische Dichtung, radial und axial, je Schnurdicke |
+| `o-ring_dynamic_gland_parameters.csv` | Nut für dynamische Dichtung, radial, je Schnurdicke |
 
 Nicht kopiert, obwohl vorhanden: `single_row_angular_contact_ball_bearing_parameters.csv`,
 `single_row_cylindrical_roller_bearing_parameters.csv`, `single_row_tapered_roller_bearing_parameters.csv`. Kein Code
@@ -101,3 +104,16 @@ Eigenheiten der neuen Tabellen:
 - `internal_tooth_lock_washer_parameters.csv` (DIN 6797, M2 bis M14) führt in `n` die **Anzahl** der Zähne, nicht eine
   Länge. Die Zähne greifen 30 % der radialen Breite nach innen; ihre genaue Form ist wie bei den Sprengringen eine
   Zeichnung und kein Maß. Die Zollzeilen der Datei gehören zu ASME B18.21.1 und bleiben ungenutzt.
+- `o-ring_parameters.csv` ist nach der **dreistelligen Größe** sortiert (001 bis 475, AS568-Nummern), nicht nach einem
+  Durchmesser: 025 hat 29,87 mm Innendurchmesser, 020 nur 21,95 mm. `id` ist der Innendurchmesser, `w` die Schnurdicke,
+  `id_tol` und `w_tol` die Toleranzen. Der Ring ist im Modell ein Torus mit dem Nennmaß; die 1 bis 5 % Dehnung, mit der
+  er im Einbau auf der Welle sitzt, zeigt das Modell nicht.
+- Die beiden Nutentabellen sind nach Schnurdicke sortiert, nicht nach Größe — dieselbe Nut gilt für alle Ringe einer
+  Schnur. `d_r_*` ist die Tiefe bei radialer, `d_a_*` bei axialer Einfederung; die dynamische Tabelle kennt nur die
+  radiale. `g_w_0/1/2` ist die Nutbreite für 0, 1 oder 2 Stützringe; für Schnüre unter 1,78 mm steht dort „-“, weil es
+  dafür keine Stützringe gibt. `g_r_min/max` ist der Radius am Nutgrund, `clr_max` das größte radiale Spiel und
+  `ecc_max` die zulässige Exzentrizität.
+- **Die Nutmaße sind keine ISO-3601-2-Werte.** Sie stammen aus dem Apple Rubber Seal Design Guide, wie bd_warehouse im
+  Quelltext selbst schreibt („have not been verified against ISO 3601-2“). Sie sind als Ausgangspunkt brauchbar und
+  werden hier als solcher weitergegeben, nicht als Norm. `soma` rechnet die Tiefe als Mittel von min und max und den
+  Radius als Mittel von min und max; die Grenzwerte stehen in `gland_spec()`.
