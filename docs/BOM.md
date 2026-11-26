@@ -52,7 +52,7 @@ needed beforehand.
 
 | Field | Meaning |
 |---|---|
-| `kind` | Class of the standard part: `Screw`, `Nut`, `Washer`, `HeatSetInsert`. `null` for a part marked `role="hardware"` that was modelled by hand (a bearing, a motor). |
+| `kind` | Class of the standard part: `Screw`, `Nut`, `Washer`, `HeatSetInsert`, `Bearing`, `RetainingRing`, `ShaftKey`, `ORing`. Every class in `soma.fasteners` gets its own line without being registered anywhere. `null` for a part marked `role="hardware"` that was modelled by hand (a motor, a switch). |
 | `designation` | The full designation, e.g. `ISO 4762 M3x12` or `Heat-set insert ruthex M3x5.7`. `null` for a hand-modelled part. |
 | `part_number` | The manufacturer's number, from the table. Only heat-set inserts have one. |
 | `count` | How many instances. **This is the number you order.** |

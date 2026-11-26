@@ -61,7 +61,7 @@ Instead of SOMA AI or an agent in SOMA's terminal you can use a desktop agent ap
 - **Section and explode:** cut the model open, take an assembly apart
 - **Parameters:** change the values the agent made adjustable, without touching the code
 - **History:** every step of the agent on a timeline, preview and restore old states
-- **Standard parts and STEP import:** screws, nuts, washers, heat-set inserts, ball bearings, retaining rings and shaft keys from dimension tables, with the matching holes, traps and keyways. Purchased parts as STEP
+- **Standard parts and STEP import:** screws, nuts, washers, heat-set inserts, ball bearings, retaining rings, shaft keys and O-rings from dimension tables, with the matching holes, traps, keyways and seal grooves. Purchased parts as STEP
 - **Skills:** rule sets for the agent, such as 3D printing, CNC, laser cutting, sheet metal and tolerances, switched on per model. Edit them or add your own
 - **Analysis:** overhangs, wall thickness, and strength with FEM (CalculiX)
 - **Animation:** motion described in Python, played in the viewer or rendered to video
