@@ -411,7 +411,11 @@ def check(sheet):
         dbox, tbox = _dim_boxes(d)
         if d["kind"] in ("diameter", "radius"):
             c = np.array(d["points"][0])
-            found = any(np.allclose(np.array(cc), c, atol=1e-3) and abs(r - d["radius"]) < 1e-3
+            # Nur die Lage in der Ansicht zaehlt, nicht die Tiefe: im Schnitt liegt der Kreis der Schnittflaeche auf
+            # der Schnittebene, waehrend circles() die Tiefe der Kante nennt, aus der er stammt (eine Nutkante im
+            # Hintergrund hat eine andere). Beides ist derselbe Kreis auf dem Blatt.
+            q = np.array(v.pt(c))
+            found = any(abs(r - d["radius"]) < 1e-3 and np.allclose(np.array(v.pt(cc)), q, atol=1e-3)
                         for cc, r in v.circles(arcs=True))
             if not found:
                 add(f"{what}: view {v.name} has no circle with radius {drawing.num(d['radius'], 3)} around "

@@ -86,6 +86,13 @@ print(json.dumps(dict(
     ensure_ascii=False))
 `;
 
+/** Alle Texte eines Blatts, für die Notizen: sie sollen die Zahlen des Modells nennen, nicht eigene. */
+const SHAFT_TEXTS = `
+import json, sys, ezdxf
+msp = ezdxf.readfile(sys.argv[1]).modelspace()
+print(json.dumps([e.dxf.text for e in msp if e.dxftype() == "TEXT"], ensure_ascii=False))
+`;
+
 /** Was auf dem Blatt steht, gegen das, was `soma bom` sagt: Liste der Abweichungen, leer heißt einig.
  *  Spalten: Pos, Name, Qty, Bezeichnung. Gefertigte Teile stehen mit ihrem Namen, gekaufte mit ihrer Bezeichnung. */
 function listDiff(rows, bom) {
@@ -197,8 +204,8 @@ try {
     Boolean(sheet) && (draw.errors ?? []).length === 0 && sheet.warnings.length === 0,
     sheet ? ((sheet.warnings ?? []).map((w) => w.message ?? JSON.stringify(w)).join('; ') || 'keine Warnung')
       : JSON.stringify(draw?.errors ?? 'kein JSON'));
-  check('Zwei Ansichten, sechs Maße und ein Blatt im Satz',
-    sheet && sheet.views.length === 2 && sheet.dims.length === 6 && (draw.set?.sheets ?? 0) === 1,
+  check('Zwei Ansichten und sechs Maße auf der Baugruppe',
+    sheet && sheet.views.length === 2 && sheet.dims.length === 6,
     sheet ? `${sheet.views.length} Ansichten, ${sheet.dims.length} Maße` : 'kein Blatt');
 
   const dump = spawnSync(PY, ['-c', SHEET, path.join(project, sheet?.dxf ?? '')],
@@ -228,6 +235,48 @@ try {
   check('Der Text "Ø10" steht neben dem Maß und hängt an einer Hinweislinie',
     page?.leader?.lines === 5 && page.leader.reach > 145,
     JSON.stringify(page?.leader ?? null));
+
+  // Das zweite Blatt: die Welle. Auf einer Teilzeichnung stehen die Maße, die die Werkstatt braucht — und sie sind aus
+  // dem Modell gerechnet, nicht getippt: die Kette 23,95 / 15 / 20 / 8 kommt aus Lagerbreite, Nut und Passfeder. Ein
+  // getipptes Maß wäre hier die Stelle, an der die Zeichnung still veraltet.
+  const part2 = json(['drawing', 'build', 'shaft', '--json', '--project', project]);
+  const shaft = (part2?.built ?? []).find((s) => s.id === 'Shaft');
+  check('Die Wellenzeichnung baut ohne Warnung',
+    Boolean(shaft) && (part2.errors ?? []).length === 0 && shaft.warnings.length === 0,
+    shaft ? ((shaft.warnings ?? []).map((w) => w.message ?? JSON.stringify(w)).join('; ') || 'keine Warnung')
+      : JSON.stringify(part2?.errors ?? 'kein JSON'));
+  check('Zwei Schnitte und acht Maße auf dem Wellenblatt',
+    shaft && shaft.views.length === 2 && shaft.dims.length === 8
+      && shaft.views.every((v) => v.kind === 'section'),
+    shaft ? `${shaft.views.length} Ansichten, ${shaft.dims.length} Maße` : 'kein Blatt');
+
+  // Die Kette auf dem Blatt, gegen die Maße, aus denen sie gerechnet ist: Gesamtlänge, Überstand, die Lage der ersten
+  // Nut (Überstand + Lagerbreite - Spiel), der Abstand der Nuten (Lagerbreite + Tiefe - Spiel - Spiel), die Länge der
+  // Passfeder, ihr Abstand zur Stirnfläche — und die beiden Maße, die im Schnitt stehen.
+  const val = (v) => shaft?.dims.some((d) => Math.abs(d.value - v) < 1e-9);
+  const groove = OVERHANG + SEAT - 0.05;        // 23,95: das Spiel des Sprengrings in seiner Nut ist 0,05 je Seite
+  const keyEnd = DEPTH + 12 + 10;               // 56: Mitte der Passfeder + halbe Länge
+  check('Die Maße der Welle stimmen mit dem Modell überein',
+    val(SHAFT_LEN) && val(OVERHANG) && val(groove) && val(MID - SEAT - 1) && val(20)
+      && val(DEPTH + STUB - keyEnd) && val(BORE) && val(3),
+    (shaft?.dims ?? []).map((d) => d.label).join(', '));
+  check('Der Satz hat zwei Blätter', (part2.set?.sheets ?? 0) === 2 && (part2.built ?? []).length === 2,
+    `${part2?.set?.sheets} Blätter, ${(part2?.built ?? []).length} gebaut`);
+
+  // Die Notizen nennen die Nutentiefe der Passfeder — und auch die steht im Modell (`key.shaft_depth`), damit die
+  // Zeichnung nicht behauptet, die Nut sei 1,4 tief, während die Welle 1,8 tief gefräst wird.
+  const texts = spawnSync(PY, ['-c', SHAFT_TEXTS, path.join(project, shaft?.dxf ?? '')],
+    { encoding: 'utf8', env: { ...process.env, PYTHONIOENCODING: 'utf-8' } });
+  let notes = [];
+  try {
+    notes = JSON.parse(texts.stdout || '[]');
+  } catch {
+    notes = [];
+  }
+  check('Die Notizen des Wellenblatts kommen aus dem Modell',
+    notes.some((s) => s.includes('3x3x20') && s.includes('shaft depth 1.8'))
+      && notes.some((s) => s.includes('Ø9.6') && s.includes('width 1.1')),
+    notes.filter((s) => s.startsWith('  ')).join(' / ') || 'keine Notiz gefunden');
 
   // Dieselbe Messung an der exportierten Datei: from_file(overlaps=True) ist ein eigener Weg und muss dasselbe sagen.
   // Ein Export, in dem zwei Körper ineinandersitzen, ist genau der Fehler, den man erst im anderen Programm merkt.

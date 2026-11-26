@@ -55,6 +55,40 @@ Where the dimensions go was decided by the geometry, not by taste, and the secti
 The plan shows the bearing's rings and balls because the top bearing's face is flush with the housing's top face
 (`MID = HOUSING_D - SEAT`), so they are not hidden — they are what you see when you look down the bore.
 
+## The part sheet
+
+`drawings/shaft.py` is the other half: an A4 sheet at 2:1 for the shaft alone, a section C-C along the axis, a section
+B-B across the keyway at 5:1, eight dimensions — the fits and the grooves, no item numbers and no parts list. Both
+sheets read the same `model.py`, so neither can disagree with the model or with the other.
+
+The main view is a **section**, and that was decided by the drawing rules rather than by taste. The shaft runs along Z
+and the keyway is on +Y, so the front view — which looks from -Y — would show the keyway as a hidden edge, and a
+dimension belongs on a visible one (ISO 129). A section along the axis at x = 0 holds the axis and the keyway: its
+length, its depth and both grooves become cut faces, and the outline is the same as a plain view's, so nothing is lost.
+The keyway is 3 mm wide, 6 mm on the sheet — two lines that nothing fits between — so it gets a cross-section of its
+own, where 3 N9 and Ø10 h6 both have room.
+
+| Dimension | Value | Where it comes from |
+|---|---|---|
+| 79 over all | `OVERHANG + HOUSING_D + STUB` | The shaft `model.py` extrudes. |
+| 15 overhang | `OVERHANG` | The length in front of the housing; its far point is the housing face, which is on the silhouette. |
+| 23.95 to the first groove | `OVERHANG + SEAT - 0.05` | Not a chosen number: the groove is 0.1 wider than the ring, so its flank sits 0.05 mm before the bearing. |
+| 15 groove to groove | `MID - SEAT - thickness` | Both rings are 1 mm thick and their seats are 16 mm apart. |
+| 20 keyway | `KEY_LENGTH` | The key, and the tool that milled the slot. |
+| 8 to the end face | `STUB - 12 - 10` | The keyway is 12 mm behind the housing and 20 long, so it ends 8 mm before the shaft does. |
+| Ø10 h6 | `BORE` | In B-B, where the shaft is a circle. |
+| 3 N9 | `key.width` | Between the two walls of the slot, in B-B. |
+
+The two chains do not meet, and that is deliberate: the grooves are chained from the left end of the shaft and the
+keyway from the right one, so neither has to be expressed through a number nobody would choose. The short dimension
+sits closer to the part (15 inside, 79 outside), so it is the long one's extension lines that cross a dimension line.
+
+One line on the sheet is geometry and not a mistake: in B-B the slot's far end is 10 mm behind the cutting plane, and
+its rim — where the rounded end of the slot meets the shaft — is visible through the opening, so it is drawn. It bulges
+0.23 mm, which is 1.15 mm at 5:1: across a slot that is 15 mm wide it reads almost as a straight line, and then the
+keyway looks closed at the top. It is not. The slot's floor is the line 1.8 mm below the surface, and that is the depth
+note 4 names.
+
 ## What this example found
 
 Four gaps, all closed:
@@ -71,6 +105,11 @@ Four gaps, all closed:
   beside the dimension with nothing in between — the fix the checker itself suggests ("move the text with
   `text_at=`") produced a broken-looking sheet for any text longer than the distance it measures. There is
   `leader=True` now (`DIMTMOVE=1`), and `app/resources/skills/drawings.md` says when it is needed.
+- A diameter dimension in a **section** was always reported as "view has no circle with radius 5 around …", even with
+  the circle right there. The check compared against `View.circles()`, which reports the depth of the edge a circle
+  came from — the groove rim at z = 25.05 — while the circle of a cut face sits on the cutting plane at z = 46. Only
+  the position in the view decides whether a sheet is right, so the comparison is in view coordinates now. The shaft
+  sheet is what found it, because a cross-section is the one place a diameter belongs.
 
 Still open, and deliberately: the ring's lugs are a rectangle, not the teardrop a maker draws. DIN leaves the shape
 open, so a drawing of this ring will differ from the model in the lugs and nowhere else.
