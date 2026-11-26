@@ -50,6 +50,8 @@ Instead of SOMA AI or an agent in SOMA's terminal you can use a desktop agent ap
 
 **Send to agent** also copies its note to the clipboard: paste it into the agent app. A markup note names its picture in `.soma/feedback/`, which the agent opens itself. A chat without file access and commands does not work.
 
+**MCP:** `soma mcp` starts SOMA as an [MCP](https://modelcontextprotocol.io) server over stdio, so an agent app can measure a model, read the parts list, build and export through the protocol instead of shell commands. `--read-only` leaves only the tools that change nothing. None of the tools takes code or a path: the model is the only input, and exports land in the project's `exports/` folder.
+
 ## Features
 
 - **SOMA AI built in:** a chat with an agent that designs the model, with questions to click and voice input that stays on your computer
@@ -59,10 +61,12 @@ Instead of SOMA AI or an agent in SOMA's terminal you can use a desktop agent ap
 - **Section and explode:** cut the model open, take an assembly apart
 - **Parameters:** change the values the agent made adjustable, without touching the code
 - **History:** every step of the agent on a timeline, preview and restore old states
-- **Standard parts and STEP import:** screws, nuts, washers and heat-set inserts from dimension tables, purchased parts as STEP
+- **Standard parts and STEP import:** screws, nuts, washers, heat-set inserts, ball bearings, retaining rings and shaft keys from dimension tables, with the matching holes, traps and keyways. Purchased parts as STEP
 - **Skills:** rule sets for the agent, such as 3D printing, CNC, laser cutting, sheet metal and tolerances, switched on per model. Edit them or add your own
 - **Analysis:** overhangs, wall thickness, and strength with FEM (CalculiX)
 - **Animation:** motion described in Python, played in the viewer or rendered to video
+- **Parts list:** `soma bom` reads the parts from the model: purchased parts grouped with a count and their part number, own parts with volume and mass, as a table for a spreadsheet
+- **Measured, not guessed:** `soma inspect` reports size, volume, area and topology as JSON, so the agent can check a number instead of looking at a picture
 - **Export:** STEP, STL, 3MF, DXF and more, technical drawings as PDF
 - **Plain CadQuery in and out:** start from an existing CadQuery script, export the model as a script for CQ-editor or VS Code
 - **Your own folder:** open an existing folder, for example a Git repository, and use SOMA there. Agent apps such as Claude Desktop or the Codex app can work on a model too
