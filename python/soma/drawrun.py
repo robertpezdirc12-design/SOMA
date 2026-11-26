@@ -28,6 +28,10 @@ INDEX_VERSION = 2
 DPI = 200
 MAX_PX = 7000  # laengste Seite des Bildes, A0 mit 200 dpi waeren 9400 px und 250 MB im Speicher
 ON_EDGE = 0.05  # mm auf dem Blatt: so nah muss ein Maßpunkt an einer Kante der Ansicht liegen
+# Header cells by which a parts list identifies its item-number column (ISO 6433). Without such a cell a table is
+# not a parts list and nothing is compared. Deliberately only words meaning "position": a hole or flag table with
+# "No." in its header is not a parts list.
+ITEM_HEADERS = ("pos", "pos.", "pos.nr", "pos.-nr", "pos nr", "posnr", "item", "item no", "item no.")
 
 
 class DrawingError(Exception):
@@ -402,6 +406,43 @@ def check(sheet):
             add(f"Title block: \"{drawing._short(fd['text'])}\" does not fit the field {fd['caption']}: "
                 + ("too high." if tall else f"{w:.1f} mm long, room for {max(room, 0):.1f} mm.")
                 + " Shorten it, or draw your own title block (titleblock=False).", sheet.file, sheet.line, fd["cell"])
+
+    # Parts list and item numbers (ISO 6433): every number in the list belongs to a leader, and every leader
+    # carrying a bare number belongs in the list. A part without a number is hard to find on the sheet; a number
+    # without a part is worse, it points at something that is not there. A dimension with the text "3" is not an
+    # item number - only a leader is.
+    balloons = {}
+    for lb in sheet._labels:
+        own = lb.get("owner")
+        if own and own[0] == "leader" and lb["text"].strip().isdigit():
+            balloons.setdefault(lb["text"].strip(), []).append(lb)
+    for t in sheet._tables:
+        head = next((c for c in t["cells"] if c["text"].strip().lower() in ITEM_HEADERS), None)
+        if head is None:
+            continue  # a table without item numbers is not a parts list
+        rows = {}
+        for c in t["cells"]:
+            if c["col"] == head["col"] and c["row"] > head["row"] and c["text"].strip():
+                rows.setdefault(c["text"].strip(), []).append(c)
+
+        def name_of(cell):
+            """The part name is to the right of its number - include it in the message so the reader can find it."""
+            n = next((x for x in t["cells"] if x["row"] == cell["row"] and x["col"] == cell["col"] + 1), None)
+            return f' "{drawing._short(n["text"])}"' if n and n["text"].strip() else ""
+
+        for num, cs in rows.items():
+            if len(cs) > 1:
+                add(f"The parts list gives item {num} to {len(cs)} rows: one item number, one line.",
+                    t["file"], t["line"], _union([c["cell"] for c in cs]))
+            if num not in balloons:
+                add(f"The parts list has item {num}{name_of(cs[0])}, but no leader points at that part: "
+                    f"add view.leader(point_on_the_part, \"{num}\", at=(x, y)).", t["file"], t["line"], cs[0]["cell"])
+        for num, ls in balloons.items():
+            if num not in rows:
+                have = ", ".join(sorted(rows, key=lambda s: (len(s), s))) or "none"
+                add(f"A leader \"{num}\" points at a part the parts list does not have (items: {have}). "
+                    "Correct the number, or add the row.", ls[0]["file"], ls[0]["line"],
+                    _union([r.aabb() for r in (_text_rect(x["entity"]) for x in ls) if r]))
 
     # Maße: Punkte auf Kanten, Kreise vorhanden, feste Zahlen wie gemessen
     for d in sheet._dims:

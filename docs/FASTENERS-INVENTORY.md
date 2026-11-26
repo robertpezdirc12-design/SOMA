@@ -262,6 +262,10 @@ Status: G1, G1a, G2, G3, G4, G5, G6, G7, G8, G9, G10 and G11 are implemented. G1
 list is done. G12 to G14 are the three that need a concrete model before they are worth the tables, which is why they
 are still open on purpose.
 
+The example that carries all of this — `docs/examples/bearing-block` — now has **three sheets that build without a
+warning**: the assembly (A3, six dimensions), the shaft (A4 at 2:1, eight) and the housing (A4 at 1:1, seven). Drawing
+the parts, not only the assembly, is what found the two defects listed as item 11.
+
 ### Recommended order
 
 1. ~~**G2 (BOM)**~~ — **done** (`soma bom`). It was the smallest change and it unlocked every purchasing workflow.
@@ -285,7 +289,15 @@ are still open on purpose.
    to here measured one part at a time, and a standard part is only right or wrong against the part it goes into. Two
    things fell out of it: `soma inspect` had no way to see two parts sharing space, and the documented `ShaftKey`
    example was only correct for a shaft along X.
-11. **G12–G14** — only against a concrete model that needs them.
+11. ~~**Sheets for the parts, not only for the assembly**~~ — **done** (`drawings/shaft.py`, `drawings/housing.py`).
+    Two things fell out of it that reading the model had not shown. The housing's bore had **no shoulder**: the second
+    cut lay inside the first and removed nothing, so nothing stopped an outer ring from sliding out, and every test
+    still passed because all of them measured parts. And the checker warned about a diameter placed in a section —
+    correct on the sheet, wrong in the code, because it compared the depth of the edge the circle came from instead of
+    its place in the view. Both are fixed and pinned (a volume check, and a view-coordinate comparison). The sheets
+    also settled where a dimension belongs: on a visible edge, in the view that shows the feature, one diameter per
+    centre.
+12. **G12–G14** — only against a concrete model that needs them.
 
 ### Licensing note
 

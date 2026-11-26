@@ -135,7 +135,10 @@ sh.text("Deburr all edges", (30, 30))
 - Item numbers with `view.leader(point_on_part, "1", at=..., end="dot")`, lined up in a row or column next to the
   views and off the parts list, the same part always gets the same number.
 - Parts list with `sh.table(rows, at)` on the title block (columns as wide as their texts, or give `widths` in mm): item, name, quantity, material or designation (for
-  standard parts the designation of `soma.fasteners`, e.g. "ISO 4762 M5x16").
+  standard parts the designation of `soma.fasteners`, e.g. "ISO 4762 M5x16"). The first cell of the header row must
+  say `Pos` (or `Item`), so the check knows the table is a parts list: it then compares the numbers in that column
+  with the leaders and reports a number without a leader, a leader without a number and a number used twice. A part
+  that is on the sheet but not in the list, or in the list but pointed at by nothing, is the mistake this catches.
 
 ## Free drawing
 
@@ -158,7 +161,8 @@ sh.text("Deburr all edges", (30, 30))
    that lists what the project has. Errors name file and line. Warnings report texts on
    edges, on dimension, leader or cutting lines or on each other, things outside the frame or on the title block or a
    table, texts too long for their cell or title block field, points on no edge, typed numbers that differ from the
-   model and uncommon scales. Fix them, or tell the user why one is fine.
+   model, item numbers that do not match the leaders of a parts list and uncommon scales. Fix them, or tell the user
+   why one is fine.
 2. **Open the picture and look at it** (`.soma/drawings/<id>.png`, the build prints the path). It is large and gets scaled down when you open it:
    crop parts of it (Pillow is installed) to read small texts and check every dimension and hatching.
 3. `soma drawing info "Name"`: views with their place on the sheet, circles, every dimension with its value. Compare

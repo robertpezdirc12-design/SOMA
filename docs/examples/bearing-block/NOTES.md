@@ -111,7 +111,7 @@ model's own docstring promised a step at each end.
 
 ## What this example found
 
-Five gaps, all closed:
+Seven gaps, all closed:
 
 - **The housing had no shoulder.** Its docstring describes a stepped bore — "the step at each end is the shoulder that
   stops an outer ring from moving outwards" — and the code cut a Ø30 through-bore and then cut Ø26 between the seats.

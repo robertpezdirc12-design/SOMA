@@ -1592,18 +1592,19 @@ class Sheet:
         file, line = _where()
         cells = []
         y = y_top
-        for row in rows:
+        for i, row in enumerate(rows):
             if len(row) > len(widths):
                 raise ValueError(f"The row {row!r} has more cells than widths")
             x = x0
-            for cell, w in zip(row, widths):
+            for j, (cell, w) in enumerate(zip(row, widths)):
                 self.msp.add_lwpolyline([(x, y - row_height), (x + w, y - row_height), (x + w, y), (x, y)], close=True,
                                         dxfattribs={"layer": "TITLE"})
                 if cell is not None and str(cell) != "":
                     e = self.text(str(cell), (x + 1.5, y - row_height + (row_height - text_height) / 2),
                                   height=text_height, _owner=owner)
+                    # row/col for the check: it compares the item numbers with the leader lines
                     cells.append(dict(text=str(cell), entities=e if isinstance(e, list) else [e] if e is not None else [],
-                                      cell=(x, y - row_height, x + w, y)))
+                                      cell=(x, y - row_height, x + w, y), row=i, col=j))
                 x += w
             y -= row_height
         box = (x0, y, x0 + sum(widths), y_top)

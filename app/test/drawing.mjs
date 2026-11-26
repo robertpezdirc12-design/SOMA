@@ -69,6 +69,7 @@ assert 8 < w < 20 and sh.text_width("Ra 3.2\\nlonger second line") > 2 * w, w
 tb = sh.table([["Pos", "Name"], ["2", "Very long part name"]], at=(30, 50))
 assert abs((tb[2] - tb[0]) - (max(8, sh.text_width("Pos") + 4) + sh.text_width("Very long part name") + 4)) < 0.01, tb
 top.leader((20, -20, 12), "Ra 3.2", at=(200, 262), side="left")
+top.leader((-20, -20, 12), "2", at=(200, 60), end="dot")
 `;
 
 const BROKEN = `from soma.drawing import Sheet
@@ -200,6 +201,25 @@ print(json.dumps(dict(
   const err = res?.errors[0];
   check('Fehler: Datei, Zeile und die vorhandenen Bauteile', err?.file === 'drawings/broken.py' && err.line === 3 && err.message.includes("'Brackett' does not exist")
     && err.message.includes("'Bracket'"), JSON.stringify(err)?.slice(0, 160));
+
+  // Parts list and item numbers: every number needs a leader, every leader needs a number. No model needed because
+  // the check only reads the sheet - a sheet with a table and leaders is enough.
+  const listCheck = py(['-c', String.raw`
+import json
+from soma import drawrun
+from soma.drawing import Sheet
+sh = Sheet("List", size="A4", scale=1, titleblock=False, frame=False)
+sh.table([["Pos", "Name", "Qty"], ["1", "Housing", "1"], ["1", "Shaft", "1"], ["2", "Key", "1"]], at=(20, 280))
+sh.leader((60, 200), "1", at=(100, 220))
+sh.leader((60, 200), "9", at=(100, 190))
+print(json.dumps([x["message"] for x in drawrun.check(sh)]))
+`]);
+  let lw = [];
+  try { lw = JSON.parse(listCheck.stdout); } catch { /* unten */ }
+  const lhas = (part) => lw.some((m) => m.includes(part));
+  check('Parts list: number without leader, leader without number, number twice - and the matching number silent',
+    lw.length === 3 && lhas('item 2 "Key"') && lhas('A leader "9"') && lhas('gives item 1 to 2 rows') && lhas('items: 1, 2'),
+    (listCheck.stderr || lw.join(' | ')).slice(-300));
 
   // DXF: echte Maße, Schraffur nur am geschnittenen Teil, Linien der Einzelheit nur im Kreis
   const dxfCheck = py(['-c', String.raw`
