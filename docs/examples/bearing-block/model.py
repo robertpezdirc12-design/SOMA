@@ -32,6 +32,8 @@ STUB = param(30.0, "Output stub", min=20.0, max=80.0, step=1.0, unit="mm",
 bearing_a = Bearing("6200", at=(0, 0, 0))     # 10 x 30 x 9, the smallest of the 62 series
 BORE, OD, SEAT = bearing_a.bore, bearing_a.diameter, bearing_a.width
 MID = HOUSING_D - SEAT                        # 25: the second shoulder, and the middle bore in between
+SHOULDER = 2.0                                # radial width of the shoulder that stops an outer ring
+MID_BORE = OD - 2 * SHOULDER                  # 26: what is left of the bore between the two seats
 bearing_b = Bearing("6200", at=(0, 0, MID))
 KEY_LENGTH = 20.0                             # a design decision: the table does not name lengths
 KEY_Z = HOUSING_D + 12.0                      # centre of the key on the stub, clear of bearing B and inside the shaft
@@ -43,9 +45,13 @@ def cyl(diameter, z0, z1):
 
 
 # --- housing ----------------------------------------------------------------------------------------------------
+# The bore is cut from the inside out: 26 through, then 30 at each end. The other order does nothing - a 26 mm cut
+# inside a 30 mm hole removes no material - and leaves a plain through-bore with no shoulder, which is what this
+# example had until its part sheet was drawn: nothing to stop an outer ring from sliding out.
 housing = cq.Workplane("XY").box(HOUSING_W, HOUSING_H, HOUSING_D, centered=(True, True, False))
-housing = housing.cut(cyl(OD, -1.0, HOUSING_D + 1.0))          # through-bore, 1 mm past both faces
-housing = housing.cut(cyl(OD - 4.0, SEAT, MID))                # 26 mm between the two seats
+housing = housing.cut(cyl(MID_BORE, -1.0, HOUSING_D + 1.0))    # 26 through, 1 mm past both faces
+housing = housing.cut(cyl(OD, -1.0, SEAT))                     # seat A, 30 wide, SEAT deep
+housing = housing.cut(cyl(OD, MID, HOUSING_D + 1.0))           # seat B, the shoulder at MID
 add_part("Housing", housing, color=(0.62, 0.64, 0.68))
 
 # --- shaft: two grooves for the circlips, one keyway on the stub -------------------------------------------------

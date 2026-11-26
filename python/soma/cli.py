@@ -419,17 +419,36 @@ def cmd_anim(args):
         return _fail(str(e))
 
 
+def _drawing_target(root, name, drawrun):
+    """Welches Blatt `soma drawing build <name>` meint, als Datei. Ein Name darf der Blattname, die Kennung, der
+    Dateiname ohne drawings/ und .py oder ein Pfad sein — sonst baut ein Tippfehler stillschweigend alles neu und
+    meldet Erfolg. Liefert (Ziel oder None, Fehlermeldung oder None)."""
+    if not name:
+        return None, None
+    entry = drawrun.find(root, name)
+    if entry is not None:
+        return root / entry["file"], None
+    for p in (root / name, root / "drawings" / f"{name}.py"):
+        if p.is_file():
+            return p, None
+    known = []
+    names = {Path(x["file"]).as_posix(): x["name"] for x in drawrun.read_index(root).get("drawings", [])}
+    for p in drawrun.drawing_files(root):
+        title = names.get(p.relative_to(root).as_posix())
+        known.append(p.stem if title is None or title.lower() == p.stem.lower() else f"{p.stem} ({title})")
+    return None, (f"There is no drawing {name!r}. " + (f"Drawings: {', '.join(sorted(known))}." if known
+                                                      else "The project has no drawings/ folder yet."))
+
+
 def cmd_drawing(args):
     """Technische Zeichnungen in drawings/*.py (E76): bauen, auflisten, beschreiben."""
     from . import drawrun
     root = Path(args.project).resolve()
     try:
         if args.action == "build":
-            target = None
-            if args.name and args.name.endswith(".py"):
-                target = root / args.name
-                if not target.is_file():
-                    return _fail(f"{args.name} does not exist")
+            target, miss = _drawing_target(root, args.name, drawrun)
+            if miss:
+                return _fail(miss)
             res = drawrun.build_all(root, target, args.dpi)
             if args.json:
                 print(json.dumps(dict(built=res["built"], errors=res["errors"], orphans=res["orphans"], set=res["set"]),

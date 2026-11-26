@@ -55,7 +55,7 @@ Where the dimensions go was decided by the geometry, not by taste, and the secti
 The plan shows the bearing's rings and balls because the top bearing's face is flush with the housing's top face
 (`MID = HOUSING_D - SEAT`), so they are not hidden — they are what you see when you look down the bore.
 
-## The part sheet
+## The shaft's sheet
 
 `drawings/shaft.py` is the other half: an A4 sheet at 2:1 for the shaft alone, a section C-C along the axis, a section
 B-B across the keyway at 5:1, eight dimensions — the fits and the grooves, no item numbers and no parts list. Both
@@ -89,10 +89,38 @@ its rim — where the rounded end of the slot meets the shaft — is visible thr
 keyway looks closed at the top. It is not. The slot's floor is the line 1.8 mm below the surface, and that is the depth
 note 4 names.
 
+## The housing's sheet
+
+`drawings/housing.py` is A4 at 1:1: a section A-A along the bore, a plan below it, seven dimensions. At 1:1 the block
+is 90 × 50, so both views fit one above the other at a scale a workshop does not have to undo, and the block's three
+outside dimensions (90, 34, 50) go where nothing else is — the width below the section, the depth and the height on the
+left, one above the other so they line up.
+
+The two shoulders are chained from the front face: 9 to the first, 16 to the second. Both stand **outside** the block on
+the right, and their extension lines have to cross the hatching to get there — the shoulders are 30 mm inside the block,
+so a dimension line drawn between them would run through solid material. A housing is mostly material, and that is the
+one thing that makes it harder to dimension than the shaft.
+
+Ø30 gets a diameter dimension in the plan, where it is a circle. Ø26 does not: from above it is behind the seat, and
+`diameter()` needs a circle. It is dimensioned in the section between the two lines that are its walls, with the Ø in
+front of the number — DIN 406 allows that where the circle is not in the view, and it is the only place on this sheet
+where a dimension is not a diameter dimension.
+
+This sheet found the bug below. The section is drawn from the model, and it showed a straight Ø30 bore where the
+model's own docstring promised a step at each end.
+
 ## What this example found
 
-Four gaps, all closed:
+Five gaps, all closed:
 
+- **The housing had no shoulder.** Its docstring describes a stepped bore — "the step at each end is the shoulder that
+  stops an outer ring from moving outwards" — and the code cut a Ø30 through-bore and then cut Ø26 between the seats.
+  A cut inside a larger hole removes nothing: the bore was 30 mm from face to face, and the two bearings had nothing to
+  bear against. Every test still passed, because each of them measures the *parts*: `inspect --overlaps` sees no
+  overlap either way, and the shaft volume, the ring positions and the parts list are all unaffected by a missing
+  shoulder. The housing's part sheet found it — the section showed a straight bore. The bore is cut from the inside out
+  now (26 through, then 30 at each end), and `npm run test:assembly` holds the housing volume against the block minus
+  the stepped bore, so the shoulder is a number: 131781.7 mm³ with it, 128966.8 without.
 - `soma inspect` measured each part and nothing between parts, so an assembly could be wrong and still report
   `ok: true`. It now has `--overlaps`, and the MCP tool `soma_inspect` takes `overlaps: true`.
 - The `ShaftKey` example in the skill and in `docs/FASTENERS-INVENTORY.md` left out `direction` and `angle`, which is
@@ -110,6 +138,9 @@ Four gaps, all closed:
   came from — the groove rim at z = 25.05 — while the circle of a cut face sits on the cutting plane at z = 46. Only
   the position in the view decides whether a sheet is right, so the comparison is in view coordinates now. The shaft
   sheet is what found it, because a cross-section is the one place a diameter belongs.
+- `soma drawing build <name>` built **every** sheet, not the one it named: the CLI only passed the name on when it ended
+  in `.py`. A typo therefore rebuilt the whole project and returned 0. The name is resolved now — sheet name, id, file
+  stem or path — and an unknown one is an error that lists what there is.
 
 Still open, and deliberately: the ring's lugs are a rectangle, not the teardrop a maker draws. DIN leaves the shape
 open, so a drawing of this ring will differ from the model in the lugs and nowhere else.

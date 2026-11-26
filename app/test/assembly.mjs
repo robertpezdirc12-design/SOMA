@@ -20,7 +20,11 @@ const json = (args) => { const r = py(args); return r.status === 0 ? JSON.parse(
 const EXAMPLE = path.resolve(import.meta.dirname, '..', '..', 'docs', 'examples', 'bearing-block');
 
 const BORE = 10;          // 6200
+const OD = 30;            // Aussendurchmesser des 6200
+const SHOULDER = 2;       // radiale Breite der Schulter, die den Aussenring haelt
 const SEAT = 9;           // Breite des Lagers: so tief sitzt es in seiner Bohrung
+const W = 90;             // Gehäusebreite
+const H = 50;             // Gehäusehöhe
 const DEPTH = 34;         // Gehäusetiefe
 const MID = DEPTH - SEAT; // 25
 const OVERHANG = 15;
@@ -149,6 +153,18 @@ try {
   check('Beide Ringnuten und die Passfeder stecken im Wellenvolumen', removed > 112 && removed < 116,
     `${removed.toFixed(2)} mm³ entfernt, Erwartung 113,8 (Nuten 13,5 + Nut 100,2)`);
 
+  // Dasselbe für das Gehäuse: 90 x 50 x 34, abzüglich Ø26 durch und zweimal Ø30 auf SEAT tief. Fehlte die Schulter,
+  // wäre die Bohrung durchgehend 30 — und kein Aussenring hätte etwas, woran er sich abstützt. Die Zeichnung des
+  // Gehäuses hat genau das aufgedeckt: der Schnitt zeigte eine gerade Bohrung, weil `cut(Ø30)` durch alles ging und
+  // `cut(Ø26)` danach nichts mehr zu schneiden fand.
+  const bore26 = Math.PI * (OD / 2 - SHOULDER) ** 2 * DEPTH;
+  const seats = 2 * Math.PI * ((OD / 2) ** 2 - (OD / 2 - SHOULDER) ** 2) * SEAT;
+  const block = W * H * DEPTH - bore26 - seats;
+  check('Das Gehäuse hat an jedem Ende eine Schulter für den Außenring',
+    Math.abs(part('Housing').volume - block) < 0.5,
+    `${part('Housing').volume.toFixed(1)} mm³, mit Schultern ${block.toFixed(1)}, `
+      + `ohne ${(W * H * DEPTH - Math.PI * (OD / 2) ** 2 * DEPTH).toFixed(1)}`);
+
   // Jeder Ring liegt in seiner Nut und stößt an sein Lager: A bei 9..10 auf der Innenseite von Lager A, B bei 24..25
   // auf der Innenseite von Lager B. Damit hält A die Welle in der einen Richtung und B in der anderen.
   const z = (n) => [part(n).bounds.min[2], part(n).bounds.max[2]];
@@ -260,8 +276,23 @@ try {
     val(SHAFT_LEN) && val(OVERHANG) && val(groove) && val(MID - SEAT - 1) && val(20)
       && val(DEPTH + STUB - keyEnd) && val(BORE) && val(3),
     (shaft?.dims ?? []).map((d) => d.label).join(', '));
-  check('Der Satz hat zwei Blätter', (part2.set?.sheets ?? 0) === 2 && (part2.built ?? []).length === 2,
-    `${part2?.set?.sheets} Blätter, ${(part2?.built ?? []).length} gebaut`);
+
+  // Das dritte Blatt: das Gehäuse. Es ist das Blatt, das den Fehler oben gefunden hat — der Schnitt zeigte eine
+  // gerade Bohrung, wo zwei Schultern hingehören. Deshalb steht die Schulter hier noch einmal als Maß: 9 tief, dann 16
+  // bis zur zweiten, und der Durchmesser des Mittelteils, der nur im Schnitt als Zahl erscheint.
+  const part3 = json(['drawing', 'build', 'housing', '--json', '--project', project]);
+  const housing = (part3?.built ?? []).find((s) => s.id === 'Housing');
+  check('Die Gehäusezeichnung baut ohne Warnung',
+    Boolean(housing) && (part3.errors ?? []).length === 0 && housing.warnings.length === 0,
+    housing ? ((housing.warnings ?? []).map((w) => w.message ?? JSON.stringify(w)).join('; ') || 'keine Warnung')
+      : JSON.stringify(part3?.errors ?? 'kein JSON'));
+  const hval = (v) => housing?.dims.some((d) => Math.abs(d.value - v) < 1e-9);
+  check('Zwei Ansichten und sieben Maße auf dem Gehäuse, beide Bohrungen dabei',
+    housing && housing.views.length === 2 && housing.dims.length === 7
+      && hval(W) && hval(H) && hval(DEPTH) && hval(SEAT) && hval(MID - SEAT) && hval(OD) && hval(OD - 2 * SHOULDER),
+    (housing?.dims ?? []).map((d) => d.label).join(', '));
+  check('Der Satz hat drei Blätter', (part3.set?.sheets ?? 0) === 3 && (part3.built ?? []).length === 1,
+    `${part3?.set?.sheets} Blätter, ${(part3?.built ?? []).length} gebaut`);
 
   // Die Notizen nennen die Nutentiefe der Passfeder — und auch die steht im Modell (`key.shaft_depth`), damit die
   // Zeichnung nicht behauptet, die Nut sei 1,4 tief, während die Welle 1,8 tief gefräst wird.
