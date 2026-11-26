@@ -6,6 +6,19 @@ the version is bumped.
 
 ## [Unreleased]
 
+### Added
+
+- `soma inspect`: what the model is, measured instead of looked at. It reports volume, surface area, bounding box, centre of mass, the number of solids, shells, faces, edges and vertices, and whether each part is a valid, closed body — for the whole model and per part, as one JSON document with a fixed schema (`soma.inspect/1`, described in `docs/INSPECT-SCHEMA.md`). The same command measures a finished STEP or BREP file (`--step`), so an export can be checked against the model it came from: same number of bodies, same volume, same box. `--density 1.24` adds a mass estimate, `--strict` makes a geometric error an exit code for CI. The document contains no timestamp and no absolute path, so two runs on the same geometry are identical and can be diffed.
+- `docs/FASTENERS-INVENTORY.md`: what the standard-parts library covers today, which of the 48 bd_warehouse tables are used (13), and what is missing — bearings, a bill of materials, low-profile and shoulder screws, retaining rings, shaft keys, O-rings, and the partially threaded shank of ISO 4014. It also records why `cq_warehouse` should not be added as a dependency: the tables are already here and the geometry is SOMA's own code.
+- `soma mcp`: SOMA as an MCP server over stdio, for coding agents outside the app (Codex, Claude Code, Gemini CLI, Cursor). Three tools: build the model, measure it, export it. None of them takes code, a command or a path — the project folder is fixed when the server starts and export always writes to `exports/` inside it, so an agent cannot run anything the user did not already run by opening the model. `--read-only` leaves only the measuring tool in the list. Whatever a model prints while a tool runs goes to stderr, so the protocol on stdout stays clean.
+- `docs/EXTERNAL-BRIDGES.md`: the decision and the POC procedure for PartCAD, FreeCAD and KiCad, with acceptance numbers and kill criteria, so no bridge is built on a hunch. It also records the rejections: `cq_warehouse` as a dependency, and the official CadQuery MCP server, which runs a Python string and would add a second way to execute code with the user's rights.
+- `docs/DRAFTWRIGHT-HANDOFF.md`: how a Draftwright result (photo, sketch, measurements, product rules) becomes a SOMA model through `inputs/` and `param()` alone — one JSON file with numbers, sources and open questions, no client, no API key, no new dependency.
+
+### Changed
+
+- Six skills gained rules that came out of measurements, not taste. **Tolerances and fits**: `soma inspect` as the way to check a fit numerically, and a mesh tolerance that follows the size of the part (a fixed 0.01 mm is pointless on a 300 mm part). **Assemblies**: why names in a STEP file are ASCII and unique, that groups become sub-assemblies, and how to verify an export against the model. **3D printing**: mass and filament length before a print, `--strict` so an open shell cannot reach a slicer, and a tolerance of about half the layer height. **CNC**: STEP and never STL to a shop, and the same verification before the file goes out. **FEM**: check that the part is one valid closed solid before waiting for a solve, and that thread length is not in the geometry. **Standard parts**: what the library covers and what it does not, and that fine pitches are not supported.
+- The agent's `AGENTS.md` lists `soma inspect`, so a model is checked by measurement after a change instead of by looking at the picture.
+
 ## [1.0.0] - 2026-11-22
 
 SOMA 1.0. It brings its own agent, SOMA AI, so you no longer need a coding agent to design with SOMA. Models made with 1.0 keep working in later versions, changes that break them only come with a new major version.

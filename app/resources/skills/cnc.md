@@ -52,3 +52,23 @@ material **{{material}}**, smallest end mill Ø {{tool_d}} mm, machine with **{{
 - Choose thicknesses from standard plate or bar stock (5, 6, 8, 10, 12, 15, 20 mm).
 - Check before you finish: every inner vertical corner has at least `INNER_R`, every feature is reachable with the
   machine.
+
+## The file that goes to the shop
+
+- **STEP, never STL.** A shop needs exact geometry. STL is a triangle approximation with a tolerance you chose; the
+  only thing it is good for here is a quick look. `soma export "<Part>" --format step`.
+- **Names in the STEP file are ASCII.** `Gehäuse` arrives as `Gehaeuse`, `Größe` as `Groesse` (the format cannot carry
+  the umlaut, OCCT writes it double-encoded). Tell the user, and keep the drawing or the note next to it in the
+  original spelling so the shop can match the two.
+- **No threads, no fits, no surface finish in the file.** They live in `NOTES.md`, with thread depth and which faces
+  matter. A shop that has to guess will guess differently from what you meant.
+- **Verify before sending:**
+
+```bash
+soma inspect --strict                                  # closed, valid, single-body parts
+soma export --assembly --format step
+soma inspect --step exports/<name>.step --json         # same solids, volume and box as the model
+```
+
+If `totals.solids` or `totals.volume` differ from the model, a part left as a shell or two bodies were merged. Fix it
+before the file goes out; nobody downstream checks this for you.

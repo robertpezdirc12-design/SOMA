@@ -101,6 +101,28 @@ study.bolt("Screw 2", preload=3000, grade="10.9")
 - Bolts take longer: two calculation steps, often a few minutes with contact. A coarser mesh (`Study(mesh=...)`) helps
   while trying things out.
 
+## Before you compute
+
+The calculation is only as good as the geometry it gets. Check it first, without the app:
+
+```bash
+soma inspect --strict
+```
+
+- **One closed solid per part.** A part with `topology.solids` 0 has no volume to mesh, one with more than one solid is
+  meshed as several bodies with a free surface between them — the result then shows stresses where there is nothing.
+  `multiple_bodies` in the checks means: decide whether it is one part or two.
+- **`valid: false`** means a broken face. The mesher may still produce a mesh, and the stress peak it reports sits at
+  the defect, not at the design.
+- **`bounds.size` gives the size for the mesh.** `Study(mesh=…)` is in mm and defaults to about 1/30 of it; a value
+  between 1/50 and 1/100 of the largest dimension is finer and slower.
+- **Volume and mass** (`--density`) are the quick check that the part is the one you think it is: a wall thickness
+  entered as 12 instead of 1.2 mm shows up as ten times the mass before you wait a minute for a solve.
+
+Thread length is not modelled in SOMA's standard parts: a hex bolt ISO 4014 or DIN 931 has a fully threaded shank in
+the geometry even though the real one is partly plain. For a bolt study that matters only for the grip length, so take
+the grip from `screw.length` and the plate thicknesses, not from the geometry.
+
 ## Compute and read
 
 1. `soma build`, then `soma analyze fem analyses/bracket.py`. Takes from seconds to about a minute. The summary lists the

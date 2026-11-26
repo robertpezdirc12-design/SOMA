@@ -95,5 +95,25 @@ def overhang_faces(part):
 ```
 
 Curved faces (holes, fillets underneath) are not covered here. `soma analyze overhang --threshold {{overhang}}` and
-`soma analyze thickness --threshold {{min_wall}}` check every spot, curved faces too (skill for analysis). Export each
-printable part as STL or 3MF: `soma export "Lid" --format 3mf`. References are not printed.
+`soma analyze thickness --threshold {{min_wall}}` check every spot, curved faces too (skill for analysis).
+
+Then measure it, because a slicer needs a closed solid and you cannot see that in a picture:
+
+```bash
+soma inspect --strict --density 1.24    # 1.24 = PLA; exit code 1 if a part is not a closed solid
+```
+
+- `--strict` fails when a part has no solid, is invalid or has zero volume. A shell prints as nothing, or the slicer
+  repairs it into something else.
+- `--density` adds the mass in grams: 1.24 PLA, 1.27 PETG, 1.04 ABS/ASA, 1.21 TPU. Filament length is mass / (area of
+  the filament cross-section × density): for 1.75 mm filament about 0.33 m per gram of PLA. Tell the user the mass
+  before they print, and the print time is theirs to estimate.
+
+Export each printable part as STL or 3MF: `soma export "Lid" --format 3mf`. References are not printed.
+
+- **3MF over STL** when the slicer takes it: one file for several parts, units and colours inside.
+- **Tolerance:** the slicer works from the mesh, so a deviation far below the layer height buys nothing. Use
+  `--tolerance` of about half the layer height (0.1 mm at 0.2 mm layers) — not 0.01 mm, which triples the file for a
+  surface the nozzle cannot follow anyway. Small parts (under 50 mm) may take 0.02 mm.
+- **Orientation:** the exported file is in model orientation. If a part must be printed lying down, say so in
+  `NOTES.md` or export it in print orientation — do not silently rotate the part in the model.

@@ -60,6 +60,46 @@ ISO 4762 (DIN 912), head flush, with some room around it:
 In CadQuery: `.cboreHole(diameter, cboreDiameter, cboreDepth)`. Countersunk screws (ISO 10642, 90°):
 `.cskHole(diameter, cskDiameter, 90)`.
 
+## Measure instead of looking
+
+A picture shows that a model looks right, not that it is right. `soma inspect` measures it and needs no app:
+
+```bash
+soma inspect --json                                  # the whole model, one document
+soma inspect --parts Lid --json                      # one part
+soma inspect --strict                                # exit code 1 on a geometric error
+```
+
+It gives volume, surface area, bounding box, centre of mass and the number of solids, shells, faces, edges and
+vertices — per part and in total — plus a list of problems. The document has a fixed schema (`soma.inspect/1`), so a
+number can be compared between two builds.
+
+- **A part with `topology.solids` 0 has no volume.** It is a shell or a bare face; a cut on it silently does nothing.
+  Fix that before anything else.
+- **`valid: false`** means OCCT found a broken face or edge, usually after a cut or a fillet. Do not export it.
+- **`multiple_bodies`**: two solids in one part. Either two parts that should be separate, or a boolean that missed.
+- Write the expected volume into the code as an assertion while you work out a fit; delete it afterwards. Two numbers
+  that should match (a bore that must take a shaft, a pocket that must hold a nut) are worth checking numerically, not
+  by eye.
+
+`soma analyze clearance` finds tight gaps and `soma analyze thickness` thin walls; `soma inspect` is the cheap summary
+in front of them.
+
+## Mesh tolerance follows the part size
+
+The mesh for the viewer is not fixed: SOMA uses about 0.0004 × the diagonal of the part, clamped to 0.01–0.2 mm. The
+same rule applies to `soma export --tolerance`: a fixed 0.01 mm is pointless on a 300 mm part and makes the file
+enormous, while 0.05 mm on a 20 mm part throws away the shape.
+
+| Largest dimension of the part | Reasonable `--tolerance` |
+|---|---|
+| up to 50 mm | 0.02 mm |
+| 50 to 200 mm | 0.05 mm |
+| 200 to 500 mm | 0.1 mm |
+| over 500 mm | 0.2 mm or coarser |
+
+STEP, IGES and BREP are exact and take no tolerance at all. Only mesh formats (STL, 3MF, AMF, OBJ, GLB, GLTF) do.
+
 ## Fits for machined parts (ISO 286)
 
 - Shaft turning or sliding in a hole: H7/g6. Located, assembled by hand: H7/h6. Press fit: H7/p6.

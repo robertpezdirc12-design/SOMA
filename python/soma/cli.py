@@ -286,6 +286,45 @@ def cmd_serve(args):
     return 0
 
 
+def cmd_mcp(args):
+    """SOMA as an MCP server over stdio for agents outside the app (mcp.py). No port, no socket."""
+    from . import mcp
+    if args.print_tools:
+        print(json.dumps(mcp.tools_json(args.read_only), ensure_ascii=False, indent=2))
+        return 0
+    try:
+        return mcp.serve(args.project, args.read_only)
+    except mcp.McpError as e:
+        return _fail(str(e))
+
+
+def cmd_inspect(args):
+    """Measured facts about the model or a CAD file as one JSON document (schema soma.inspect/1, inspection.py)."""
+    from . import inspection
+    try:
+        if args.step:
+            doc = inspection.from_file(args.step, fast=args.fast, density=args.density)
+        else:
+            doc = inspection.from_model(args.project, args.entry, args.parts and args.parts.split(","),
+                                        fast=args.fast, density=args.density)
+    except inspection.InspectError as e:
+        if args.json:
+            print(json.dumps(dict(schema=inspection.SCHEMA, ok=False, error=str(e)), ensure_ascii=False))
+        else:
+            print(f"inspect: {e}", file=sys.stderr)
+        return 1
+    if args.out:
+        inspection.write(doc, args.out)
+        if not args.json:
+            print(f"written: {args.out}")
+    if args.json:
+        print(inspection.write(doc))
+    elif not args.out:
+        print(inspection.text(doc))
+    # Ein Fehler in der Geometrie ist ein Ergebnis, kein Absturz: mit --strict wird er zum Exit-Code
+    return 1 if args.strict and not doc["ok"] else 0
+
+
 def _fail(msg, code=1):
     print(msg, file=sys.stderr)
     return code
@@ -585,6 +624,28 @@ def main(argv=None):
 
     s = sub.add_parser("serve", help="measuring service for the app (JSON lines on stdin/stdout)")
     s.set_defaults(func=cmd_serve)
+
+    i = sub.add_parser("inspect", help="measured facts about the model or a STEP/BREP file as JSON (volume, area, "
+                                      "bounding box, topology, validity)")
+    i.add_argument("--step", metavar="FILE", help="measure this STEP or BREP file instead of the model "
+                                                  "(e.g. to check an export)")
+    i.add_argument("--parts", help="only these parts, separated by commas")
+    i.add_argument("--entry", help="entry point of the model (default: from project.json, else model.py)")
+    i.add_argument("--density", type=float, metavar="G_CM3", help="material density for a mass estimate, e.g. 1.24 "
+                                                                 "for PLA, 2.7 for aluminium")
+    i.add_argument("--fast", action="store_true", help="skip the validity check (isValid is the slow part on "
+                                                       "freeform parts)")
+    i.add_argument("--out", metavar="FILE", help="write the JSON document to this file as well")
+    i.add_argument("--strict", action="store_true", help="exit code 1 when the geometry has an error (for CI)")
+    i.add_argument("--project", default=".")
+    i.add_argument("--json", action="store_true", help="print the JSON document (the default is a short table)")
+    i.set_defaults(func=cmd_inspect)
+
+    m = sub.add_parser("mcp", help="run SOMA as an MCP server over stdio, for coding agents outside the app")
+    m.add_argument("--read-only", action="store_true", help="only measuring: no build, no export")
+    m.add_argument("--print-tools", action="store_true", help="print the tool list as JSON and exit")
+    m.add_argument("--project", default=".")
+    m.set_defaults(func=cmd_mcp)
 
     w = sub.add_parser("warm", help=argparse.SUPPRESS)  # nur fuer die App: vorgewaermt auf einen Auftrag warten
     w.set_defaults(func=cmd_warm)

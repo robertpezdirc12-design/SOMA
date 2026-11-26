@@ -67,6 +67,33 @@ as wide as the nut. For a slot along Y use `angle=30`.
 - Aluminium extrusions, typical: 2020 slot 6 with M5, 3030 slot 8 with M6, 4040 slot 8 with M8. Systems differ: ask
   which one.
 
+## What the library covers, and what it does not
+
+Covered: screws ISO 4762, 7380, 10642, 4017, 4014, DIN 931, 4026; nuts ISO 4032, 4033, 4035, DIN 557; washers ISO
+7089, 7091, 7093; heat-set inserts from five makers; the clearance holes, tap drills, counterbores, nut traps and
+insert holes that go with them. Nothing else.
+
+Not covered, model by hand (with `role="hardware"`): ball bearings, dowel pins, retaining rings, shaft keys, O-rings,
+gears, sprockets, pulleys, springs, low-profile and shoulder screws, flange and cap nuts, imperial fasteners. Ask
+before inventing dimensions; the sizes in this skill are a starting point, not a catalogue.
+
+Three simplifications to know about:
+
+- **No threads anywhere.** The shank is the nominal diameter, the bore of a nut is nominal, the tap drill is real. That
+  is deliberate: a modelled thread costs hundreds of thousands of triangles and no slicer resolves it.
+- **ISO 4014 and DIN 931 are modelled fully threaded**, although the real bolt has a plain shank below the head. Fine
+  for a picture and for a clearance hole; wrong if someone reads a thread length off the model. Say so if it matters.
+- **Fine pitches are not supported.** Only coarse threads exist. `Screw("ISO 4762", "M10x1.25x40")` is rejected as
+  unreadable, and `"M10x1.25"` is read as M10 with a length of 1.25 mm and rejected as a non-standard length — the
+  second message is misleading, it is not about the length. Use the coarse thread, or model the special case yourself.
+
+## Keeping the parts list
+
+There is no bill-of-materials command yet. `soma inspect --json` gives every standard part with its `designation`
+("ISO 4762 M3x10") and its `group`; heat-set inserts also carry `part_number` from the table. Build the list in
+`NOTES.md` from that output instead of from memory — the same screw written twice in different words is the most
+common mistake in a hand-written parts list.
+
 ## In the model
 
 Parts from `soma.fasteners` get `role="hardware"` by themselves: opaque, part of `output/model.step`, skipped by

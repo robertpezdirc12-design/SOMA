@@ -51,7 +51,50 @@ the output afterwards. For motions with several steps or parts, write an animati
 `soma anim check "Name" --gap {{motion_gap}}`: it checks every moment. `soma analyze clearance` shows tight gaps in
 the model position.
 
+## STEP files and other programs
+
+`output/model.step` and `soma export --assembly --format step` write the groups as sub-assemblies, with part names and
+colours. Three rules follow from the format, not from taste:
+
+- **Names in the STEP file are ASCII and unique.** `add_part("Gehäuse")` becomes `Gehaeuse` in the file; `step_name`
+  holds that name. Umlauts, `ß` and CJK cannot be written correctly (OCCT writes them double-encoded), so SOMA
+  transliterates. The name in the app stays as the user wrote it. Two names that transliterate to the same string are
+  rejected, and rightly so: `Größe` and `Groesse` would collide.
+- **Groups become sub-assemblies.** The nesting is the point of the export: `group="Housing/Screws"` is two levels.
+  A flat model arrives in the other program as a flat list.
+- **References go under "Reference"**, purchased parts keep their group. References are in the file (so the model is
+  complete) but not in `soma export --all`.
+
+Check the result with the same tool that measured the model, not by opening the file somewhere else:
+
+```bash
+soma inspect --json --out model.json
+soma export --assembly --format step
+soma inspect --step exports/<name>.step --json --out export.json
+```
+
+`totals.solids`, `totals.volume` and `bounds.size` must match. If they do not, bodies were lost or merged on the way
+out — usually a part that was a shell instead of a solid (`topology.solids` 0).
+
+## Foreign STEP files
+
+`import_assembly("inputs/board.step")` keeps the parts with their names and colours, sub-assemblies as groups. Things
+that catch people out:
+
+- **The origin is often a corner, not the centre.** Look at the bounding box first, then move it deliberately with
+  `asm.loc = cq.Location((x, y, z))`.
+- **Colours sit on the bodies, not on the compound.** A board with several bodies shows one colour per body; a single
+  colour for the whole thing is a simplification, not a bug in the file.
+- **A reference has no volume.** Give it `role="reference"`: semi-transparent, not in `soma export --all`, and
+  `soma inspect` reports it as a warning instead of an error. Cut clearances around it, do not export it.
+- Do not modify files in `inputs/`. Load them, and put the modifications in your own parts.
+
 ## Parts list
 
 A table in `NOTES.md`: part, count, material or process, and for purchased parts size and length. Update it with every
 new part.
+
+The designations are already in the model, so do not type them: `soma inspect --json` gives `designation` for every
+part from `soma.fasteners` ("ISO 4762 M3x10"), and the `group` and `role` of every part. Use that to write the table
+instead of recalling what you built. There is no bill-of-materials command yet, so `NOTES.md` is the only place a
+quantity survives.
