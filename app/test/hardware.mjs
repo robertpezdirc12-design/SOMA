@@ -1,0 +1,215 @@
+// Test für die Zukaufteile nach den Lagern (Lücken G3, G5, G6): Schulter- und Flachkopfschraube, Sprengringe
+// DIN 471/472 mit Nut, Passfeder DIN 6885 mit Nut. Maße aus den Tabellen, ein Körper, Lage wie bei Scheibe und Lager,
+// Werkzeuge zum Schneiden. Dann ohne App über die CLI: die Teile sind Zukaufteile in der Kosovnica und Körper im
+// Messbericht. Läuft ohne App, nur mit Python.
+// Aufruf: npm run test:hardware (SOMA_PYTHON zeigt auf das Python mit cadquery).
+import { spawnSync } from 'node:child_process';
+import fs from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
+import { checker, cleanup } from './harness.mjs';
+
+const t = checker();
+const { check } = t;
+
+const PY = process.env.SOMA_PYTHON || path.join(process.env.LOCALAPPDATA ?? '', 'soma-dev', 'venv', 'Scripts', 'python.exe');
+const py = (args, opts = {}) => spawnSync(PY, ['-m', 'soma', ...args], {
+  encoding: 'utf8', env: { ...process.env, PYTHONIOENCODING: 'utf-8' }, ...opts,
+});
+
+const LIB_CHECKS = String.raw`
+import json
+import cadquery as cq
+from soma.fasteners import Screw, RetainingRing, ShaftKey, lengths, standards, _plain_rows
+
+def out(label, ok, detail=""):
+    print(json.dumps([label, bool(ok), str(detail)[:110]]), flush=True)
+
+def bb(s):
+    b = s.BoundingBox()
+    return (b.xmin, b.xmax, b.ymin, b.ymax, b.zmin, b.zmax)
+
+def near(a, b, tol=0.01):
+    return abs(a - b) <= tol
+
+def raises(fn):
+    try:
+        fn()
+    except ValueError:
+        return True
+    return False
+
+def dia_at(shape, z, th=0.02):
+    """Durchmesser des Querschnitts bei z: beweist, dass dort wirklich ein Absatz ist."""
+    box = cq.Solid.makeBox(200, 200, th, cq.Vector(-100, -100, z - th / 2))
+    return shape.intersect(box).BoundingBox().xlen
+
+# --- G3: Schulter- und Flachkopfschraube ------------------------------------------------------------------------------
+
+s = Screw("ISO 7379", "M6x25", at=(0, 0, 0))
+d = s.dims
+box = bb(s.shape)
+out("ISO 7379 M6x25: ein Koerper, Kopf ueber der Schulter, Gewindeende darunter",
+    len(s.shape.Solids()) == 1 and s.shape.isValid() and near(s.shoulder, d["ds"], 1e-9)
+    and near(s.length, 25, 1e-9) and near(s.shank_length, 25 + d["b"], 1e-9)
+    and near(box[5], d["k"], 1e-6) and near(box[4], -(25 + d["b"]), 1e-6),
+    (len(s.shape.Solids()), round(box[4], 2), round(box[5], 2)))
+
+# Der Freistich ist enger als das Gewinde: als Vereinigung von Zylindern entstuende dort eine Bohrung
+mid = -(25 + d["g2"] / 2)
+out("Freistich ist eine Nut, keine Bohrung: Schulter %s, Freistich %s, Gewinde 6" % (d["ds"], d["dg2"]),
+    near(dia_at(s.shape, -12.5), d["ds"]) and near(dia_at(s.shape, mid), d["dg2"]) and near(dia_at(s.shape, -(25 + d["g2"] + 2)), 6.0),
+    (round(dia_at(s.shape, -12.5), 2), round(dia_at(s.shape, mid), 2), round(dia_at(s.shape, -(25 + d["g2"] + 2)), 2)))
+
+out("Laengen ISO 7379 M5 sind die Schulterlaengen der Tabelle",
+    lengths("ISO 7379", "M5")[:5] == [10.0, 12.0, 16.0, 20.0, 25.0], lengths("ISO 7379", "M5")[:5])
+
+h = s.shoulder_hole(fit=0.02)
+out("shoulder_hole: Durchmesser Schulter + Passung, Tiefe bis unter die Schulter",
+    near(bb(h)[1] - bb(h)[0], d["ds"] + 0.02, 1e-6) and bb(h)[5] > 0.0 and bb(h)[4] <= -(25 + 1.0) + 1e-6,
+    (round(bb(h)[1] - bb(h)[0], 3), round(bb(h)[4], 2)))
+
+c = s.clearance_hole()
+out("clearance_hole reicht ueber das Gewindeende hinaus, nicht nur ueber die Schulter",
+    bb(c)[4] <= -(25 + d["b"]), round(bb(c)[4], 2))
+
+lo = Screw("OpenBuilds", "M5x10", at=(0, 0, 0))
+std = Screw("ISO 4762", "M5x10", at=(0, 0, 0))
+out("Flachkopf M5: Kopf 9 mm breit und 1,5 mm hoch, flacher als ISO 4762 (%s mm)" % std.head_height,
+    near(lo.head_diameter, 9.0, 1e-9) and near(lo.head_height, 1.5, 1e-9) and lo.head_height < std.head_height,
+    (lo.head_diameter, lo.head_height, std.head_height))
+
+out("DIN 7984 wird nicht still umgedeutet, sondern erklaert", raises(lambda: Screw("DIN 7984", "M5x10", at=(0, 0, 0))))
+
+# --- G5: Sprengringe ---------------------------------------------------------------------------------------------------
+
+for std_name, table in (("DIN 471", "din471.csv"), ("DIN 472", "din472.csv")):
+    rows = _plain_rows(table, None, ("d3", "a", "b", "d5", "s", "d2", "m"))
+    bad = []
+    for d1 in rows:
+        r = RetainingRing(std_name, d1, at=(0, 0, 0))
+        if not (near(r.free_diameter, rows[d1]["d3"], 1e-9) and near(r.thickness, rows[d1]["s"], 1e-9)
+                and near(r.groove_diameter, rows[d1]["d2"], 1e-9) and near(r.groove_width, rows[d1]["m"], 1e-9)):
+            bad.append(d1)
+    out("%s: alle %d Groessen liefern d3, Dicke und Nutmaße der Tabelle" % (std_name, len(rows)), not bad, bad[:3])
+
+bad = []
+for std_name, d1 in (("DIN 471", 20), ("DIN 471", 8), ("DIN 472", 20), ("DIN 472", 12)):
+    r = RetainingRing(std_name, d1, at=(0, 0, 0))
+    s_, box = r.shape, bb(r.shape)
+    ok = (len(s_.Solids()) == 1 and s_.isValid()
+          and near(box[4], 0.0, 1e-6) and near(box[5], r.thickness, 1e-6))  # wie eine Scheibe: bei at, nach aussen
+    if not ok:
+        bad.append((std_name, d1, len(s_.Solids()), round(box[4], 2), round(box[5], 2)))
+out("Vier Ringe: ein Koerper, Dicke ab at nach aussen wie eine Scheibe", not bad, bad[:3])
+
+r = RetainingRing("DIN 471", 20, at=(0, 0, 0))
+d = r.dims
+r_out, r_in = d["d3"] / 2 + d["b"], d["d3"] / 2
+gap = cq.Solid.makeBox(0.2, 0.2, d["s"], cq.Vector(-0.1, r_out - 0.1, 0.0))
+lug = cq.Solid.makeBox(0.2, 0.2, d["s"], cq.Vector(d["d5"] / 2 + d["a"] - 0.3, r_out + d["a"] - 0.3, 0.0))
+out("Ring ist offen (Spalt leer) und hat die Nase mit Loch",
+    r.shape.intersect(gap).Volume() < 1e-6 and r.shape.intersect(lug).Volume() > 1e-3,
+    (round(r.shape.intersect(gap).Volume(), 4), round(r.shape.intersect(lug).Volume(), 3)))
+
+g = r.groove()
+gb = bb(g)
+out("Nut zum Ring: Boden bei d2, Breite m, zentriert auf den Ring",
+    near(gb[1] - gb[0], r.d + 2.0, 1e-6) and near(gb[5] - gb[4], d["m"], 1e-6)
+    and near(gb[4], -(d["m"] - d["s"]) / 2, 1e-6),
+    (round(gb[1] - gb[0], 2), round(gb[5] - gb[4], 2), round(gb[4], 3)))
+
+gi = RetainingRing("DIN 472", 20, at=(0, 0, 0)).groove()
+out("Nut im Gehaeuse: Boden bei d2, Werkzeug beginnt an der Bohrung",
+    near(bb(gi)[1] - bb(gi)[0], RetainingRing("DIN 472", 20, at=(0, 0, 0)).groove_diameter + 2.0, 1e-6),
+    round(bb(gi)[1] - bb(gi)[0], 2))
+
+# --- G6: Passfeder -----------------------------------------------------------------------------------------------------
+
+rows = _plain_rows("shaft_key_parameters.csv", "din6885", ("b", "h", "t2", "t4"))
+bad = []
+for d1 in rows:
+    k = ShaftKey(d1, 40, at=(0, 0, 0))
+    if not (near(k.width, rows[d1]["b"], 1e-9) and near(k.height, rows[d1]["h"], 1e-9)
+            and near(k.shaft_depth, rows[d1]["t4"], 1e-9) and near(k.hub_depth, rows[d1]["t2"], 1e-9)):
+        bad.append(d1)
+out("DIN 6885: alle %d Groessen liefern b, h und beide Nuttiefen der Tabelle" % len(rows), not bad, bad[:3])
+
+k = ShaftKey(20, 40, at=(0, 0, 0))
+box = bb(k.shape)
+out("Passfeder 6x6x40 auf 20er Welle: sitzt 3,5 mm in der Welle und 2,5 mm heraus",
+    len(k.shape.Solids()) == 1 and k.shape.isValid()
+    and near(box[1] - box[0], 40, 1e-6) and near(box[3] - box[2], 6, 1e-6)
+    and near(box[4], -k.shaft_depth, 1e-6) and near(box[5], k.height - k.shaft_depth, 1e-6),
+    (round(box[1] - box[0], 2), round(box[4], 2), round(box[5], 2)))
+
+ks, kh = k.keyway("shaft"), k.keyway("hub")
+out("Nuten: Welle gerundet und t4 tief, Nabe eckig und t2 tief",
+    near(bb(ks)[5] - bb(ks)[4], k.shaft_depth, 1e-6) and near(bb(kh)[5] - bb(kh)[4], k.hub_depth, 1e-6)
+    and near(bb(ks)[3] - bb(ks)[2], k.width, 1e-6),
+    (round(bb(ks)[5] - bb(ks)[4], 2), round(bb(kh)[5] - bb(kh)[4], 2)))
+
+out("keyway kennt nur Welle und Nabe", raises(lambda: k.keyway("bore")))
+out("ShaftKey(20, 40) und ShaftKey(\"DIN 6885\", 20, 40) sind dasselbe",
+    ShaftKey(20, 40, at=(0, 0, 0)).designation == ShaftKey("DIN 6885", 20, 40, at=(0, 0, 0)).designation
+    == "DIN 6885 6x6x40")
+
+st = standards()
+out("standards() nennt die neuen Familien",
+    "DIN 471" in st["retaining_rings"] and "DIN 472" in st["retaining_rings"]
+    and "DIN 6885" in st["shaft_keys"] and "ISO 7379" in st["screws"] and "OpenBuilds" in st["screws"],
+    sorted(st))
+`;
+
+const MODEL = `import cadquery as cq
+from soma import add_part
+from soma.fasteners import Screw, RetainingRing, ShaftKey
+
+add_part("Shaft", cq.Workplane().circle(10).extrude(60))
+add_part("Ring", RetainingRing("DIN 471", 20, at=(0, 0, 55)))
+add_part("Key", ShaftKey(20, 40, at=(0, 10, 20)))
+add_part("Pin", Screw("ISO 7379", "M6x25", at=(30, 0, 0), direction="+Z"))
+add_part("Screw", Screw("OpenBuilds", "M5x15", at=(-30, 0, 0), direction="+Z"))
+`;
+
+const lib = spawnSync(PY, ['-c', LIB_CHECKS], { encoding: 'utf8', env: { ...process.env, PYTHONIOENCODING: 'utf-8' } });
+const lines = lib.stdout.split('\n').filter((l) => l.trim().startsWith('['));
+for (const line of lines) {
+  const [label, ok, detail] = JSON.parse(line);
+  check(label, ok, detail);
+}
+check('Python-Prüfungen liefen durch', lib.status === 0 && lines.length >= 16,
+  lib.status === 0 ? `${lines.length} Prüfungen` : (lib.stderr ?? '').slice(-300));
+
+const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'soma-hardware-'));
+try {
+  fs.writeFileSync(path.join(dir, 'model.py'), MODEL);
+  fs.writeFileSync(path.join(dir, 'soma.json'), JSON.stringify({ name: 'hardware', entry: 'model.py' }));
+
+  const bom = py(['bom', '--json', '--project', dir]);
+  const doc = bom.status === 0 ? JSON.parse(bom.stdout) : null;
+  const line = (kind) => doc?.purchased?.find((p) => p.kind === kind);
+  const screws = (doc?.purchased ?? []).filter((p) => p.kind === 'Screw').map((p) => p.designation).sort();
+  check('Kosovnica: Ring, Feder und beide Schrauben sind Zukaufteile mit Bezeichnung',
+    line('RetainingRing')?.designation === 'DIN 471 20x1.2' && line('ShaftKey')?.designation === 'DIN 6885 6x6x40'
+      && screws.join(' | ') === 'ISO 7379 M6x25 | OpenBuilds M5x15',
+    JSON.stringify(doc?.purchased ?? bom.stderr.slice(-150)));
+
+  const insp = py(['inspect', '--json', '--project', dir]);
+  const ins = insp.status === 0 ? JSON.parse(insp.stdout) : null;
+  const complaints = (ins?.checks?.issues ?? []).filter((c) => c.part !== 'Shaft');
+  const ring = ins?.parts?.find((p) => p.name === 'Ring');
+  const key = ins?.parts?.find((p) => p.name === 'Key');
+  check('Messbericht: Ring und Feder sind je ein gültiger Körper ohne Beanstandung',
+    Boolean(ring) && Boolean(key) && ring.topology.solids === 1 && key.topology.solids === 1
+      && ring.valid === true && key.valid === true && complaints.length === 0,
+    JSON.stringify(complaints.length ? complaints : (ring ?? insp?.error ?? insp.stderr.slice(-150))));
+
+  const once = py(['bom', '--json', '--project', dir]);
+  check('Zwei Läufe liefern dieselbe Kosovnica', once.status === 0 && once.stdout === bom.stdout,
+    `${bom.stdout?.length} vs ${once.stdout?.length}`);
+} finally {
+  cleanup(dir);
+}
+
+process.exit(t.fails ? 1 : 0);

@@ -40,7 +40,8 @@ import cadquery as cq
 from OCP.BRepIntCurveSurface import BRepIntCurveSurface_Inter
 from OCP.gp import gp_Ax1, gp_Dir, gp_Lin, gp_Pnt, gp_Trsf
 
-__all__ = ["Screw", "Nut", "Washer", "HeatSetInsert", "Bearing", "lengths", "pick_length", "standards"]
+__all__ = ["Screw", "Nut", "Washer", "HeatSetInsert", "Bearing", "RetainingRing", "ShaftKey", "lengths",
+           "pick_length", "standards"]
 
 _DATA = Path(__file__).parent / "data" / "fasteners"
 # Tabellen als Text (Dateiname -> CSV). Fuellt nur der Block von "Export as CadQuery" (cqexport.py), dann laeuft dieses
@@ -79,6 +80,13 @@ SCREWS = {
                    col="din931", head="hex", cols=("k", "s")),
     "iso4026": dict(name="ISO 4026", title="Socket set screw with flat point", table="setscrew_parameters.csv",
                     col="iso4026", head="set", cols=("s", "t")),
+    # Schulter: die Laenge ist die Schulterlaenge, das Gewindeende kommt zusaetzlich dazu
+    "iso7379": dict(name="ISO 7379", title="Hexagon socket head shoulder screw", table="shoulder_screw.csv",
+                    col="iso7379", head="shoulder", cols=("ds", "dk", "k", "b", "s", "t", "g2", "dg2")),
+    # Der Kopf ist niedriger als bei DIN 7984 und der Durchmesser groesser: eigene Reihe, kein DIN-7984-Ersatz
+    "openbuilds": dict(name="OpenBuilds", title="Low profile socket head screw (OpenBuilds)",
+                       table="low_profile_parameters.csv", col="OpenBuilds", head="socket",
+                       cols=("dk", "k", "s", "t")),
 }
 NUTS = {
     "iso4032": dict(name="ISO 4032", title="Hex nut", table="hex_nut_parameters.csv", col="iso4032", shape="hex"),
@@ -108,6 +116,8 @@ HINTS = {
     "din933": "ISO 4017 (M10, M12, M14 and M22 have a different width across flats than DIN 933)", "din913": "ISO 4026 (different point)",
     "din916": "ISO 4026 (different point)", "din934": "ISO 4032 (M10, M12, M14 and M22 have a different width across flats than DIN 934)",
     "din439": "ISO 4035", "din125": "ISO 7089", "din9021": "ISO 7093",
+    "din7984": "OpenBuilds (the low profile here is the OpenBuilds series: lower head than DIN 7984, "
+               "larger head diameter; model DIN 7984 by hand if its height matters)",
 }
 
 
@@ -256,13 +266,16 @@ def pick_length(standard, size, min_length, max_length=None):
 
 def standards():
     """What is available: {"screws": {"ISO 4762": "Socket head cap screw", ...}, "nuts": ..., "washers": ...,
-    "heat_set_inserts": [brands], "bearings": {"Deep groove ball bearing": ..., ...}}."""
+    "heat_set_inserts": [brands], "bearings": {"Deep groove ball bearing": ..., ...},
+    "retaining_rings": {"DIN 471": "Retaining ring for shafts", ...}, "shaft_keys": {"DIN 6885": ...}}."""
     return {
         "screws": {v["name"]: v["title"] for v in SCREWS.values()},
         "nuts": {v["name"]: v["title"] for v in NUTS.values()},
         "washers": {v["name"]: v["title"] for v in WASHERS.values()},
         "heat_set_inserts": sorted(set(INSERT_BRANDS.values())),
         "bearings": {v["name"]: v["title"] for v in BEARINGS.values()},
+        "retaining_rings": {v["name"]: v["title"] for v in RETAINING_RINGS.values()},
+        "shaft_keys": {v["name"]: v["title"] for v in SHAFT_KEYS.values()},
     }
 
 
@@ -553,6 +566,16 @@ def _screw_local(head, d, length, pitch, dims):
         cap = _socket(cap, p["s"], p["t"], 0.0)
     elif head == "hex":
         cap = _chamfered_hex(p["s"], p["k"], both=False)
+    elif head == "shoulder":
+        # Kopf, Schulter, Freistich und Gewindeende in einem Rotationsprofil. Der Freistich ist enger
+        # als das Gewinde; aus Zylindern zusammengesetzt entstuende dort eine Bohrung statt einer Nut.
+        ds, dk, k, b, g2, dg2 = p["ds"], p["dk"], p["k"], p["b"], p["g2"], p["dg2"]
+        prof = [(0.0, k), (dk / 2, k), (dk / 2, 0.0), (ds / 2, 0.0), (ds / 2, -length),
+                (dg2 / 2, -length), (dg2 / 2, -(length + g2)), (d / 2, -(length + g2)),
+                (d / 2, -(length + b)), (0.0, -(length + b))]
+        body = cq.Workplane("XZ").polyline(prof).close().revolve(360, (0, 0, 0), (0, 1, 0))
+        body = body.faces(">Z").chamfer(0.06 * dk).faces("<Z").chamfer(tip)
+        return _one(_socket(body.val(), p["s"], p["t"], k))
     else:
         raise ValueError(f"Unknown head shape {head!r}")
     return _one(cap.fuse(shank))
@@ -562,13 +585,17 @@ class Screw(_Part):
     """Screw without thread. Screw("ISO 4762", "M3x10", at=(x, y, z)) or Screw("ISO 4762", "M3", 10, at=...).
 
     standard      "ISO 4762" (socket head), "ISO 7380" (button head), "ISO 10642" (countersunk), "ISO 4017", "ISO 4014",
-                  "DIN 931" (hex head), "ISO 4026" (set screw)
+                  "DIN 931" (hex head), "ISO 4026" (set screw), "ISO 7379" (shoulder screw),
+                  "OpenBuilds" (low profile socket head)
     at            seat of the underside of the head (countersunk screw, set screw: the top), (x, y, z) or cq.Location
     direction     from the seat into the material, default "-Z"
     on            part the screw sits on: the seat is searched for along `direction`
     sunk          True: head flush in a counterbore, 0.5: 0.5 mm deeper. Countersunk screws always sit flush
     angle         rotation about the axis in degrees (orientation of the hex)
     check_length  False allows lengths that are not standard lengths
+
+    A shoulder screw counts its length as the shoulder length, as the standard does: the threaded end comes on
+    top of it, so `shank_length` is longer than `length`. Its pivot hole is `shoulder_hole()`, not `clearance_hole()`.
     """
 
     def __init__(self, standard, size=None, length=None, *, at=None, direction=None, on=None, sunk=False, angle=0.0,
@@ -625,9 +652,21 @@ class Screw(_Part):
         return self.dims["s"]
 
     @property
+    def shank_length(self):
+        """Length from the seat to the end of the shank. For a shoulder screw the threaded end comes on top of
+        the shoulder length, so this is longer than `length`."""
+        return self.length + self.dims["b"] if self.head == "shoulder" else self.length
+
+    @property
+    def shoulder(self):
+        """Diameter of the precision shoulder of a shoulder screw, otherwise None. This, not `d`, is the
+        diameter a pivot or locating hole has to match."""
+        return self.dims.get("ds")
+
+    @property
     def tip(self):
         """Point on the axis at the end of the shank."""
-        return self.point(self.length)
+        return self.point(self.shank_length)
 
     @property
     def outer(self):
@@ -661,7 +700,7 @@ class Screw(_Part):
         c0 = self.clearance(fit)
         c = c0 + oversize
         top = self._zs + MARGIN
-        bottom = self._zs - depth if depth is not None else -(self.length + 1.0)
+        bottom = self._zs - depth if depth is not None else -(self.shank_length + 1.0)
         tool = _cyl(c, bottom, top)
         gap = c0 - self.d + oversize  # Spiel am Kopf wie am Schaft
         if self.head == "countersunk":
@@ -673,11 +712,23 @@ class Screw(_Part):
             tool = tool.fuse(_cyl(recess or self.head_diameter + gap, 0.0, top))
         return self._world(_one(tool))
 
+    def shoulder_hole(self, fit=0.02, depth=None, oversize=0.0):
+        """Tool for cut(): hole for the shoulder of a shoulder screw, for a pivot or a locating pin.
+
+        fit       added to the shoulder diameter: 0.02 for a locating fit (H8), 0.1 for a sliding fit
+        depth     depth from the surface (`at`), default: the shoulder length plus 1 mm
+        oversize  added on top of everything (3D printing: holes come out smaller)
+        """
+        if self.shoulder is None:
+            raise ValueError(f"{self.designation} has no shoulder; use clearance_hole() or tap_hole()")
+        bottom = self._zs - depth if depth is not None else -(self.length + 1.0)
+        return self._world(_cyl(self.shoulder + fit + oversize, bottom, self._zs + MARGIN))
+
     def tap_hole(self, depth=None, diameter=None, oversize=0.0):
         """Tool for cut(): tap drill hole for a thread (or for screwing into plastic with your own `diameter`).
         depth: depth from the surface, default to 3 pitches beyond the end of the shank."""
         dia = (diameter or self.tap_drill) + oversize
-        bottom = self._zs - depth if depth is not None else -(self.length + 3 * self.pitch)
+        bottom = self._zs - depth if depth is not None else -(self.shank_length + 3 * self.pitch)
         return self._world(_cyl(dia, bottom, self._zs + MARGIN))
 
 
@@ -872,6 +923,198 @@ class HeatSetInsert(_Part):
         """Tool for cut(): hole for the insert as the manufacturer specifies, `extra_depth` mm deeper than the insert is
         long (room for displaced plastic), `oversize` added to the diameter."""
         return self._world(_cyl(self.hole_diameter + oversize, -(self.length + extra_depth), self._zs + MARGIN))
+
+
+# --- Sprengringe -------------------------------------------------------------------------------------------------------
+
+def _dia(size, what):
+    """20, "20" oder "M20" -> 20.0."""
+    if isinstance(size, numbers.Real):
+        return float(size)
+    m = re.match(r"^\s*M?\s*(\d+(?:[.,]\d+)?)\s*$", str(size), re.IGNORECASE)
+    if not m:
+        raise ValueError(f"{what}: cannot read the diameter {size!r}. Expected e.g. 20")
+    return _num(m.group(1))
+
+
+@functools.cache
+def _plain_rows(table, col, cols):
+    """Tabelle, deren erste Spalte eine nackte Zahl in mm ist (Sprengringe, Passfedern): {mass: {spalte: wert}}."""
+    out = {}
+    for key, row in _table(table):
+        try:
+            out[_num(key)] = {c: _num(row.get(f"{col}:{c}" if col else c, "")) for c in cols}
+        except ValueError:
+            continue
+    return out
+
+
+def _box(x0, x1, y0, y1, z0, z1):
+    """Quader zwischen zwei Ecken, die Reihenfolge der Ecken ist egal."""
+    x0, x1 = sorted((x0, x1))
+    y0, y1 = sorted((y0, y1))
+    z0, z1 = sorted((z0, z1))
+    return cq.Solid.makeBox(x1 - x0, y1 - y0, z1 - z0, cq.Vector(x0, y0, z0))
+
+
+RETAINING_RINGS = {
+    "din471": dict(name="DIN 471", title="Retaining ring for shafts", table="din471.csv", bore=False),
+    "din472": dict(name="DIN 472", title="Retaining ring for bores", table="din472.csv", bore=True),
+}
+
+
+@functools.cache
+def _clip_local(bore, d3, a, b, d5, s):
+    """Sprengring in der XY-Ebene, Dicke s nach +Z: Ringkoerper, Spalt, zwei Nasen mit Loch.
+
+    d3 freier Durchmesser, b Bandbreite, a Nasenlaenge, d5 Spaltweite (auch das Loch der Zange).
+    Die Nase ist ein Rechteck; DIN laesst ihre Form offen und zeichnet sie nur.
+    """
+    r_in, r_out = (d3 / 2 - b, d3 / 2) if bore else (d3 / 2, d3 / 2 + b)
+    edge = r_in if bore else r_out
+    lug = (edge - a, edge + b) if bore else (edge - b, edge + a)
+    body = _cyl(2 * r_out, 0.0, s).cut(_cyl(2 * r_in, -0.01, s + 0.01))
+    lugs = [_box(sx * d5 / 2, sx * (d5 / 2 + a), lug[0], lug[1], 0.0, s) for sx in (1, -1)]
+    gap = _box(-d5 / 2, d5 / 2, min(lug[0], r_in) - 1, max(lug[1], r_out) + 1, -0.01, s + 0.01)
+    shape = body.fuse(*lugs).cut(gap)
+    for sx in (1, -1):
+        hole = cq.Solid.makeCylinder(d5 / 2, s + 0.02, cq.Vector(sx * (d5 / 2 + a / 2), edge + (-a if bore else a) / 2, -0.01),
+                                     cq.Vector(0, 0, 1))
+        shape = shape.cut(hole)
+    return _one(shape)
+
+
+class RetainingRing(_Part):
+    """Retaining ring (circlip). RetainingRing("DIN 471", 20, at=(0, 0, 0)) sits in a groove on a 20 mm shaft,
+    RetainingRing("DIN 472", 20, at=(0, 0, 0)) in a groove in a 20 mm bore.
+
+    standard  "DIN 471" (shaft), "DIN 472" (bore)
+    size      shaft or bore diameter in mm, as a number or "20"
+    at        seat; the ring lies in the plane of `at` and reaches `thickness` away from the material, like a washer
+    direction from the seat into the material, default "-Z"
+
+    The diameter of the ring body (d3), its width, the thickness and the gap are the table values, so the ring
+    fits the groove it is meant for. The lugs are rectangles with a hole for the pliers: DIN leaves their shape
+    to the maker and only draws it.
+    """
+
+    def __init__(self, standard, size=None, *, at=None, direction=None, on=None, angle=0.0):
+        standard, size = _split_designation(standard, size)
+        self.standard_key = _norm_standard(standard, RETAINING_RINGS, "RetainingRing")
+        spec = RETAINING_RINGS[self.standard_key]
+        self.standard = spec["name"]
+        self.d = _dia(size, spec["name"])
+        rows = _plain_rows(spec["table"], None, ("d3", "a", "b", "d5", "s", "d2", "m"))
+        if self.d not in rows:
+            raise ValueError(f"{spec['name']}: there is no ring for {_fmt(self.d)} mm. Available: "
+                             + ", ".join(_fmt(x) for x in sorted(rows)))
+        self.dims = rows[self.d]
+        self.free_diameter = self.dims["d3"]
+        self.thickness = self.dims["s"]
+        self.groove_diameter, self.groove_width = self.dims["d2"], self.dims["m"]
+        self.bore = spec["bore"]
+        self._place(at, direction, on, angle, 0.0)
+
+    @property
+    def designation(self):
+        return f"{self.standard} {_fmt(self.d)}x{_fmt(self.thickness)}"
+
+    def _local(self):
+        d = self.dims
+        return _clip_local(self.bore, d["d3"], d["a"], d["b"], d["d5"], d["s"])
+
+    def groove(self, oversize=0.0):
+        """Tool for cut(): the groove the ring sits in, `groove_width` wide and centred on the ring, floor at
+        `groove_diameter`. `oversize` widens the groove diameter (3D printing: a groove comes out narrower)."""
+        extra = max((self.groove_width - self.thickness) / 2, 0.0)
+        small, big = (self.d, self.groove_diameter + oversize) if self.bore else \
+            (self.groove_diameter + oversize, self.d)
+        ring = _cyl(big + 2, -extra, self.thickness + extra).cut(
+            _cyl(small, -extra - 0.01, self.thickness + extra + 0.01))
+        return self._world(_one(ring))
+
+
+# --- Passfedern --------------------------------------------------------------------------------------------------------
+
+SHAFT_KEYS = {"din6885": dict(name="DIN 6885", title="Parallel key, form A (rounded ends)",
+                              table="shaft_key_parameters.csv")}
+
+
+@functools.cache
+def _key_local(b, h, length, depth):
+    """Passfeder mit runden Enden, Unterkante bei -depth (Nut der Welle), Oberkante bei h - depth."""
+    return cq.Workplane("XY").slot2D(length, b).extrude(h).translate((0, 0, -depth)).val()
+
+
+class ShaftKey(_Part):
+    """Parallel key (DIN 6885, form A with rounded ends). ShaftKey("DIN 6885", 20, 40, at=(0, 0, 10)) on a 20 mm
+    shaft, 40 mm long. ShaftKey(20, 40) works too.
+
+    The key sits in the shaft keyway: `at` is the point on the shaft surface, the key reaches `shaft_depth` into the
+    shaft and `height - shaft_depth` out of it. `keyway()` cuts the matching groove in the shaft or in the hub.
+    """
+
+    def __init__(self, standard, size=None, length=None, *, at=None, direction=None, on=None, angle=0.0):
+        if isinstance(standard, numbers.Real) or (isinstance(standard, str) and re.fullmatch(r"\s*M?\s*\d+([.,]\d+)?\s*", standard)):
+            standard, size, length = "DIN 6885", standard, size  # ShaftKey(20, 40)
+        standard, size = _split_designation(standard, size)
+        self.standard_key = _norm_standard(standard, SHAFT_KEYS, "ShaftKey")
+        spec = SHAFT_KEYS[self.standard_key]
+        self.standard = spec["name"]
+        self.d = _dia(size, spec["name"])
+        rows = _plain_rows(spec["table"], "din6885", ("b", "h", "t2", "t4"))
+        if self.d not in rows:
+            raise ValueError(f"{spec['name']}: there is no key for a {_fmt(self.d)} mm shaft. Available: "
+                             + ", ".join(_fmt(x) for x in sorted(rows)))
+        if length is None:
+            raise ValueError(f"{spec['name']} {_fmt(self.d)}: the length is missing, e.g. ShaftKey({_fmt(self.d)}, 40)")
+        self.dims = rows[self.d]
+        self.length = float(length)
+        if self.length <= 0:
+            raise ValueError(f"{spec['name']}: the length must be greater than 0")
+        self._place(at, direction, on, angle, 0.0)
+
+    @property
+    def designation(self):
+        return f"{self.standard} {_fmt(self.width)}x{_fmt(self.height)}x{_fmt(self.length)}"
+
+    @property
+    def width(self):
+        return self.dims["b"]
+
+    @property
+    def height(self):
+        return self.dims["h"]
+
+    @property
+    def shaft_depth(self):
+        """Depth of the keyway in the shaft (t4 in the table)."""
+        return self.dims["t4"]
+
+    @property
+    def hub_depth(self):
+        """Depth of the keyway in the hub (t2 in the table)."""
+        return self.dims["t2"]
+
+    def _local(self):
+        return _key_local(self.width, self.height, self.length, self.shaft_depth)
+
+    def keyway(self, kind="shaft", depth=None, oversize=0.0):
+        """Tool for cut(): the keyway for this key, at the same `at` and `direction`.
+
+        kind      "shaft" (milled, rounded ends, `shaft_depth` deep) or "hub" (broached, square ends, `hub_depth`)
+        depth     depth from the surface, default: the depth of the table
+        oversize  added to width and length (3D printing: a groove comes out narrower)
+        """
+        if kind not in ("shaft", "hub"):
+            raise ValueError(f"keyway: kind is \"shaft\" or \"hub\", not {kind!r}")
+        deep = depth if depth is not None else (self.shaft_depth if kind == "shaft" else self.hub_depth)
+        w, length = self.width + oversize, self.length + oversize
+        if kind == "shaft":
+            tool = cq.Workplane("XY").slot2D(length, w).extrude(deep).translate((0, 0, -deep)).val()
+        else:
+            tool = _box(-length / 2, length / 2, -w / 2, w / 2, -deep, 0.0)
+        return self._world(tool)
 
 
 # --- Waelzlager --------------------------------------------------------------------------------------------------------

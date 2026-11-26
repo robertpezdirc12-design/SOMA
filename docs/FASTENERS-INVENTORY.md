@@ -47,10 +47,15 @@ hole it needs come from the same table row, so they cannot drift apart.
 | Square nut | DIN 557 |
 | Washer | ISO 7089, ISO 7091, ISO 7093 |
 | Heat-set insert | ruthex, CNCKitchen, McMaster-Carr, Hilitchi, AE-SamZhihui |
+| Shoulder screw | ISO 7379 |
+| Low profile socket head | OpenBuilds series (not DIN 7984 — see G3) |
+| Deep-groove ball bearing | 56 catalogue numbers, open and capped, bore 3–10 mm |
+| Retaining ring | DIN 471 (shaft), DIN 472 (bore) |
+| Parallel key | DIN 6885 form A |
 
 ### 1.3 Data tables
 
-15 of the 42 files in `bd_warehouse/src/bd_warehouse/data/` are present.
+20 of the 42 files in `bd_warehouse/src/bd_warehouse/data/` are present.
 
 | Present | Not present (relevant) |
 |---|---|
@@ -58,7 +63,9 @@ hole it needs come from the same table row, so they cannot drift apart.
 
 `drill_sizes.csv` is present but only used to resolve heat-set insert holes (`_drill_mm`).
 
-Checked: all 13 files are read by the module, there is no dead table. The copy is lean, not accidental.
+Checked: all 20 files are read by the module, there is no dead table. The copy is lean, not accidental: three bearing
+tables that exist upstream (angular contact, cylindrical roller, tapered roller) are deliberately absent, because no
+code reads them — see G1a.
 
 ---
 
@@ -87,9 +94,16 @@ every output. The command now groups purchased parts by designation with a count
 mass, and writes CSV for a spreadsheet. What it still cannot do: prices, and the material of a purchased part (the
 model has a display colour, not a material).
 
-**G3. Head shapes that fixtures use daily are missing.** No low-profile socket head (DIN 7984), no shoulder screw
-(ISO 7379), no pan head, no cheese head. Shoulder screws in particular are the standard locating element in jigs,
-and modelling one by hand is exactly the kind of work a standard-parts library exists to remove.
+**G3. Head shapes that fixtures use daily are missing.** ✅ **Done for shoulder screws and low profile.** `Screw`
+gains `"ISO 7379"` and `"OpenBuilds"`. A shoulder screw is built as one revolve (head, shoulder, undercut, threaded
+end) because the undercut is narrower than the thread and a fuse of cylinders would leave a bore there instead of a
+groove; its length is the shoulder length as the standard defines it, so `shank_length` is longer and
+`shoulder_hole()` cuts the pivot hole at the shoulder diameter, not the thread clearance.
+
+The low profile series in the table is **OpenBuilds, not DIN 7984**: the head is lower (M3: 1.5 vs 2.0 mm) and wider
+(5.68 vs 5.5 mm). It is registered under the name it really is, and asking for "DIN 7984" answers with that sentence
+instead of quietly handing out different dimensions. Pan head and cheese head (`pan_head_parameters.csv`,
+`cheese_head_parameters.csv`) are still missing — one table and one head branch each.
 
 **G4. `ISO 4014` / `DIN 931` are modelled as fully threaded.** Both are partially threaded in reality: the shank
 below the head is plain, the thread starts after a defined length. `SCREWS` maps all three hex standards to the
@@ -100,12 +114,20 @@ explicitly in the `standard-parts` skill.
 
 ### P2 — needed regularly, cheap to add
 
-**G5. Retaining rings (DIN 471 / DIN 472).** Tables are in bd_warehouse, geometry is a swept profile. Common on
-any shaft with a bearing.
+**G5. Retaining rings (DIN 471 / DIN 472).** ✅ **Done** — `RetainingRing("DIN 471", 20, at=...)`, both tables, all
+86 + 88 sizes. The ring body, its width, the thickness and the gap are the table values, so it fits the groove it is
+meant for; the lugs are rectangles with a plier hole, which is a drawing rather than a measurement (DIN leaves their
+shape to the maker). `groove()` cuts the matching groove: floor at `d2`, width `m`, centred on the ring. `d4` is not
+used — the column means different things in the two tables and is not guessed at.
 
-**G6. Shaft keys and keyways (DIN 6885).** `shaft_key_parameters.csv` is present in bd_warehouse and unused here.
-A key without a matching keyway tool is half a feature, so this needs both the part and a `keyway()` cut tool —
-the same pattern `Nut.trap()` already establishes.
+**G6. Shaft keys and keyways (DIN 6885).** ✅ **Done** — `ShaftKey("DIN 6885", 20, 40, at=...)` or `ShaftKey(20, 40)`,
+form A with rounded ends, all 31 shaft sizes. The key sits in the shaft keyway: `at` is the point on the shaft
+surface, it reaches `shaft_depth` in and `height - shaft_depth` out. `keyway("shaft")` cuts the milled groove with
+rounded ends and `keyway("hub")` the broached one with square ends, each at the depth of the table.
+
+The table's two depth columns were the open question: `t4` is the shaft groove and `t2` the hub groove. Verified
+against all 31 rows — `t2 + t4` is always `h` plus 0.2 to 0.3 mm of clearance, and the assignment matches DIN 6885 for
+the 2×2, 3×3 and 8×7 keys.
 
 **G7. O-rings.** Four tables (sizes, static gland, dynamic gland). The gland dimensions are the valuable part: a
 correct O-ring groove is hard to get right by hand, and SOMA already has the cut-tool pattern to express it.
@@ -159,7 +181,7 @@ This is worth stating once in the `standard-parts` skill so agents stop "improvi
 | "Do not duplicate functionality" | Confirmed: importing `cq_warehouse` would duplicate all four classes. |
 | Runtime change | **None needed.** New families are new modules in `python/soma/`, reading new CSVs from the same `data/fasteners/` folder under the same Apache-2.0 notice. No new pip dependency. |
 
-Status: G2 and G1 are implemented (`soma bom`, `Bearing`). The rest are open, in the order above.
+Status: G1, G2, G3 (shoulder and low profile), G5 and G6 are implemented. The rest are open, in the order above.
 
 ### Recommended order
 
@@ -167,9 +189,11 @@ Status: G2 and G1 are implemented (`soma bom`, `Bearing`). The rest are open, in
 2. ~~**G1 (bearings)**~~ — **done** (`Bearing`). It was **not** "one new module + four tables" as written here first:
    it became one class in `fasteners.py` and **two** tables. Reasons in §5 — the export path and the data itself both
    decided that, not taste.
-3. **G3, G5, G6** — fixture and shaft work; each is one table plus one geometry branch.
-4. **G7, G8, G9, G10, G11** — consistency and correctness of what already exists.
-5. **G12–G14** — only against a concrete model that needs them.
+3. ~~**G5, G6**~~ — **done** (`RetainingRing`, `ShaftKey`). Two tables plus two geometry branches, as estimated;
+   the only surprise was which of the two key depth columns belongs to the shaft.
+4. ~~**G3 (shoulder screw, low profile)**~~ — **done**; pan head and cheese head remain, one table each.
+5. **G7, G8, G9, G10, G11** — consistency and correctness of what already exists.
+6. **G12–G14** — only against a concrete model that needs them.
 
 ### Licensing note
 

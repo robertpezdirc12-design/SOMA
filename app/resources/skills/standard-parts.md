@@ -1,12 +1,12 @@
 ---
 title: Standard parts
 name: Standard parts
-summary: Screws, nuts, washers, threaded inserts and deep-groove ball bearings from soma.fasteners with matching holes, nut traps, seats, dowel pins and aluminium extrusions.
+summary: Screws, nuts, washers, threaded inserts, ball bearings, retaining rings and shaft keys from soma.fasteners with matching holes, nut traps, grooves, keyways, seats, dowel pins and aluminium extrusions.
 order: 22
 category: Design knowledge
 default: always
-when: the model needs screws, nuts, washers, threaded inserts, bearings, dowel pins or profiles
-topics: Screws, nuts, washers and inserts with soma.fasteners; Position and holes; Nut traps; Ball bearings; Pins and profiles; Standard parts in the model
+when: the model needs screws, nuts, washers, threaded inserts, bearings, retaining rings, shaft keys, dowel pins or profiles
+topics: Screws, nuts, washers and inserts with soma.fasteners; Position and holes; Nut traps; Ball bearings; Retaining rings and shaft keys; Shoulder screws; Pins and profiles; Standard parts in the model
 ---
 # Skill: Standard parts
 
@@ -78,6 +78,64 @@ add_part("Bearing 1", b, group="Hardware")   # role "hardware" automatically
 - Seats: housing H7, shaft k6 when machined. Printed seats: start with `D` and adjust after a test print. Shoulders:
   on the shaft about `d + 0.2 × (D − d)`, in the housing about `D − 0.2 × (D − d)`.
 
+## Shoulder screws: `Screw("ISO 7379", ...)`
+
+A shoulder screw is a pivot, not a fastener: the shoulder is ground to f9 and locates the part, the thread only clamps.
+
+```python
+from soma.fasteners import Screw
+
+pin = Screw("ISO 7379", "M6x25", at=(0, 0, PLATE_TOP))   # 25 is the shoulder length
+add_part("Pivot pin", pin, group="Hardware")
+
+plate = plate.cut(pin.shoulder_hole(fit=0.02))   # H8 locating hole, 25 + 1 mm deep
+arm = arm.cut(pin.shoulder_hole(fit=0.10))       # the moving part runs on it
+```
+
+- The length is the **shoulder** length, as the standard defines it. `pin.shank_length` is longer by the threaded end,
+  and `pin.shoulder` is the diameter the hole has to match — 6.5 mm for an M6, not 6 mm.
+- `shoulder_hole()` cuts at the shoulder diameter; `clearance_hole()` and `tap_hole()` belong to the thread and are
+  only right for the far end. Sizes: M5, M6, M8, M10, M12, M16, M20.
+- A shoulder screw needs a shoulder screw's hole. Using a clearance hole for M6 (6.6 mm) on a 6.5 mm shoulder gives a
+  pin that rattles — that is the mistake this class exists to prevent.
+
+## Retaining rings: `RetainingRing("DIN 471", ...)`
+
+```python
+from soma.fasteners import RetainingRing
+
+ring = RetainingRing("DIN 471", 20, at=(0, 0, GROOVE_FACE))   # on a 20 mm shaft
+add_part("Circlip", ring, group="Hardware")
+shaft = shaft.cut(ring.groove())                               # the groove the ring sits in
+```
+
+- `"DIN 471"` for a shaft, `"DIN 472"` for a bore. The number is the shaft or bore diameter, not a thread size.
+- The ring lies in the plane of `at` and reaches `thickness` away from the material, like a washer. `groove()` cuts
+  where it sits: floor at `d2`, width `m`, centred on the ring.
+- `ring.free_diameter` (d3) is the free inner or outer diameter — smaller than the shaft for DIN 471, larger than the
+  bore for DIN 472, which is what makes it grip. `ring.groove_diameter` and `ring.groove_width` are the values for the
+  drawing.
+- Put the ring against a shoulder that takes the axial load, not in the middle of a shaft. The groove weakens the
+  shaft: for a 20 mm shaft it is 1.5 mm deep, so do not put a bending load right there.
+
+## Shaft keys: `ShaftKey("DIN 6885", ...)`
+
+```python
+from soma.fasteners import ShaftKey
+
+key = ShaftKey(20, 40, at=(0, 10, 20))       # 20 mm shaft, 40 mm long, `at` on the shaft surface
+add_part("Key", key, group="Hardware")
+shaft = shaft.cut(key.keyway("shaft"))        # milled, rounded ends, 3.5 mm deep
+hub = hub.cut(key.keyway("hub"))              # broached, square ends, 2.8 mm deep
+```
+
+- `ShaftKey(20, 40)` is the same as `ShaftKey("DIN 6885", 20, 40)`. Shafts from 6 to 50 mm.
+- The key straddles the surface: `at` is a point on the shaft, it goes `shaft_depth` in and `height - shaft_depth` out.
+  Those two depths are not the same number and they are not interchangeable — the shaft groove and the hub groove are
+  cut to different depths, and the difference is the clearance that lets the hub slide on.
+- `keyway("shaft")` has rounded ends because it is milled with an end mill; `keyway("hub")` is square because it is
+  broached. Both sit at the same `at` and `direction`, so the shaft and the hub line up.
+
 ## Pins and profiles
 
 - Dowel pins ISO 8734 (m6): Ø 2, 3, 4, 5, 6, 8 mm, lengths 6, 8, 10, 12, 16, 20 mm and more. Holes H7.
@@ -86,13 +144,15 @@ add_part("Bearing 1", b, group="Hardware")   # role "hardware" automatically
 
 ## What the library covers, and what it does not
 
-Covered: screws ISO 4762, 7380, 10642, 4017, 4014, DIN 931, 4026; nuts ISO 4032, 4033, 4035, DIN 557; washers ISO
-7089, 7091, 7093; heat-set inserts from five makers; deep-groove ball bearings from 3 to 10 mm bore, open and capped;
-the clearance holes, tap drills, counterbores, nut traps and insert holes that go with them. Nothing else.
+Covered: screws ISO 4762, 7380, 10642, 4017, 4014, DIN 931, 4026, 7379 (shoulder) and the OpenBuilds low profile
+series; nuts ISO 4032, 4033, 4035, DIN 557; washers ISO 7089, 7091, 7093; heat-set inserts from five makers;
+deep-groove ball bearings from 3 to 10 mm bore, open and capped; retaining rings DIN 471 and DIN 472 for shafts and
+bores from 3 to 300 mm; parallel keys DIN 6885 for shafts from 6 to 50 mm; and the clearance holes, tap drills,
+counterbores, nut traps, insert holes, grooves and keyways that go with them. Nothing else.
 
-Not covered, model by hand (with `role="hardware"`): roller and angular-contact bearings, dowel pins, retaining rings,
-shaft keys, O-rings, gears, sprockets, pulleys, springs, low-profile and shoulder screws, flange and cap nuts, imperial
-fasteners. Ask before inventing dimensions; the sizes in this skill are a starting point, not a catalogue.
+Not covered, model by hand (with `role="hardware"`): roller and angular-contact bearings, dowel pins, O-rings, gears,
+sprockets, pulleys, springs, pan head and cheese head screws, flange and cap nuts, imperial fasteners. Ask before
+inventing dimensions; the sizes in this skill are a starting point, not a catalogue.
 
 Three simplifications to know about:
 
@@ -127,6 +187,7 @@ with volume, and mass with `--density`.
 ## In the model
 
 Parts from `soma.fasteners` get `role="hardware"` by themselves: opaque, part of `output/model.step`, skipped by
-`soma export --all`. Model other purchased parts (bearings, pins) simplified, also with `role="hardware"`. A heat-set
+`soma export --all`. Model other purchased parts (motors, switches, dowel pins) simplified, also with
+`role="hardware"`. A heat-set
 insert is wider than its hole (it is melted in): leave it out of interference checks with its part. List every part
 in `NOTES.md` (`s.designation` gives "ISO 4762 M3x10", `ins.part_number` the manufacturer's number).
