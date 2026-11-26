@@ -23,7 +23,8 @@ app/test/versions.png
 app/test/smoke.png
 app/test/shots/
 
-examples/
+# Nur der Ordner im Wurzelverzeichnis: ohne den Schrägstrich davor verschluckt die Regel auch docs/examples/
+/examples/
 
 # Arbeitsdokumente der Entwicklung, nur lokal (E88)
 PLAN.md

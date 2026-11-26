@@ -1,0 +1,35 @@
+{
+  "schema": "draftwright.handoff/1",
+  "product": "Wall bracket for a 32 inch monitor arm",
+  "unit": "mm",
+  "dimensions": [
+    { "id": "plate_w",   "label": "Plate width",        "value": 120.0, "source": "measured", "confidence": "high" },
+    { "id": "plate_h",   "label": "Plate height",       "value": 120.0, "source": "measured", "confidence": "high" },
+    { "id": "plate_t",   "label": "Plate thickness",    "value": 6.0,   "source": "assumed",  "confidence": "low",
+      "note": "not visible in the photo; M6 screws and a 5 kg load suggest 6 mm aluminium" },
+    { "id": "hole_d",    "label": "Hole diameter",      "value": 6.6,   "source": "measured", "confidence": "high" },
+    { "id": "hole_pitch","label": "Hole pitch VESA 100","value": 100.0, "source": "standard", "confidence": "high" },
+    { "id": "corner_r",  "label": "Corner radius",      "value": 8.0,   "source": "measured", "confidence": "medium" },
+    { "id": "chamfer",   "label": "Front face chamfer", "value": 0.5,   "source": "standard", "confidence": "high" }
+  ],
+  "features": [
+    { "kind": "hole", "count": 4, "diameter": "hole_d", "pattern": "rectangular",
+      "pitch": ["hole_pitch", "hole_pitch"], "centered": true },
+    { "kind": "fillet", "where": "outer corners", "radius": "corner_r",
+      "note": "visible in the photo, radius estimated" }
+  ],
+  "rules": [
+    "Must fit the existing VESA 100 plate without play: clearance hole, not a tapped hole.",
+    "Front face visible when mounted: no sharp edges, chamfer 0.5 mm.",
+    "Wall side must not scratch paint: no ribs on the back."
+  ],
+  "references": [
+    { "file": "inputs/photo-front.jpg", "shows": "front view, four holes, rounded corners" },
+    { "file": "inputs/sketch.jpg", "shows": "hand sketch with 120 x 120 and the hole spacing" },
+    { "file": "inputs/arm-plate.step", "shows": "the mating part, from the customer" }
+  ],
+  "open_questions": [
+    "Material: aluminium or steel? The photo cannot tell.",
+    "Is the 6 mm thickness fixed by the customer, or may it change?"
+  ]
+}

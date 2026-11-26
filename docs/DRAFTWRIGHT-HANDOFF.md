@@ -1,6 +1,7 @@
 # Draftwright → SOMA handoff
 
-**Status:** contract · **Prepared:** 2026-11-26 · **Scope:** no new architecture, no new code path in SOMA
+**Status:** contract and worked example · **Prepared:** 2026-11-26 · **Scope:** no new architecture, no new code path in
+SOMA. The example is `docs/examples/draftwright-bracket/`, built and measured by `npm run test:handoff`.
 
 > Draftwright understands a photo, a sketch, measurements and product rules. SOMA turns that understanding into
 > parametric 3D geometry. This document fixes the seam between them so neither side has to guess: **what Draftwright
@@ -34,7 +35,7 @@ is not a number with a unit is a sentence for the agent, not a field.
   "unit": "mm",
   "dimensions": [
     { "id": "plate_w",  "label": "Plate width",   "value": 120.0, "source": "measured", "confidence": "high" },
-    { "id": "plate_h",  "label": "Plate height",  "value": 80.0,  "source": "measured", "confidence": "high" },
+    { "id": "plate_h",  "label": "Plate height",  "value": 120.0, "source": "measured", "confidence": "high" },
     { "id": "plate_t",  "label": "Plate thickness","value": 6.0,  "source": "assumed",  "confidence": "low",
       "note": "not visible in the photo; M6 screws and a 5 kg load suggest 6 mm aluminium" },
     { "id": "hole_d",   "label": "Hole diameter", "value": 6.6,   "source": "measured", "confidence": "high" },
@@ -52,7 +53,7 @@ is not a number with a unit is a sentence for the agent, not a field.
   ],
   "references": [
     { "file": "inputs/photo-front.jpg", "shows": "front view, four holes, rounded corners" },
-    { "file": "inputs/sketch.jpg", "shows": "hand sketch with 120 x 80 and the hole spacing" },
+    { "file": "inputs/sketch.jpg", "shows": "hand sketch with 120 x 120 and the hole spacing" },
     { "file": "inputs/arm-plate.step", "shows": "the mating part, from the customer" }
   ],
   "open_questions": [
@@ -93,10 +94,11 @@ instead of 6 mm is a return.
 
 ```python
 # model.py, the part Draftwright described
+import cadquery as cq
 from soma import add_part, param, import_assembly
 
 PLATE_W = param(120.0, "Plate width", min=60, max=200, step=1, unit="mm")
-PLATE_H = param(80.0, "Plate height", min=40, max=150, step=1, unit="mm")
+PLATE_H = param(120.0, "Plate height", min=40, max=150, step=1, unit="mm")
 PLATE_T = param(6.0, "Plate thickness", min=3, max=12, step=0.5, unit="mm")   # assumed, see NOTES.md
 HOLE_D = param(6.6, "Hole diameter", min=3, max=12, step=0.1, unit="mm")      # VESA 100, clearance
 PITCH = 100.0                                                                  # VESA 100, fixed by the standard
@@ -112,18 +114,34 @@ add_part("Plate", plate)
 add_part("Arm plate", import_assembly("inputs/arm-plate.step"), role="reference")
 ```
 
+**A plate 120 × 80 cannot carry a VESA 100 pattern** — 100 mm spacing needs 100 mm of plate plus edge distance in both
+directions, which is why the example above says 120 × 120. The first version of this document said 80 and would have
+produced four holes hanging over the edge. That is the kind of contradiction the verification in §4 exists to catch,
+and it is worth stating: a handoff that is internally consistent is not the same as a handoff that can be built.
+
+**The worked example is `docs/examples/draftwright-bracket/`** — `inputs/draftwright.json`, `NOTES.md` and `model.py`,
+built and measured by `npm run test:handoff`. It is the reference for what "answered" means below.
+
 ## 4. Verification
 
 ```bash
 soma build
 soma inspect --json | python -c "import json,sys; d=json.load(sys.stdin); print([p for p in d['source']['parameters']])"
 soma inspect --json | python -c "import json,sys; print(json.load(sys.stdin)['bounds']['size'])"
+
+npm run test:handoff    # the example, built and held against its JSON — and against a wrong model, to prove it bites
 ```
 
 - Every `dimensions[].id` appears as a parameter (or is a constant with a comment saying why).
 - `bounds.size` equals `[PLATE_W, PLATE_H, PLATE_T]` for the part, within a fillet.
 - `checks.ok` is true: one closed, valid solid, no duplicate bodies.
 - The `open_questions` are answered in `NOTES.md`, not just in the chat.
+
+`npm run test:handoff` is those four points as a test, so the example cannot quietly stop matching the JSON it came
+from. It builds the example in a temporary folder, compares every `dimensions[]` entry with `source.parameters`, checks
+the volume against the block minus fillets and holes — which proves the features were built and not just declared — and
+counts the answer bullets in `NOTES.md`. Then it builds the same model with 4 mm instead of 6 mm and requires the
+comparison to report it: a verification that has never failed is not a verification.
 
 ## 5. What this deliberately does not do
 
