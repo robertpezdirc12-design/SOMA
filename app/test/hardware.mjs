@@ -195,6 +195,14 @@ out("trap: Bundmutter bekommt ein rundes Lager fuer den Bund, Hutmutter ein Loch
     and near(bb(ct)[1] - bb(ct)[0], 9.9, 1e-6) and near(bb(ct)[5], 5.0 + 9.5 / 2 + 0.2, 1e-6),
     (round(dia_at(ft, 0.5), 2), round(bb(ct)[1] - bb(ct)[0], 2), round(bb(ct)[5], 2)))
 
+plain, hexn = Nut("ISO 4036", "M6", at=(0, 0, 0)), Nut("ISO 4032", "M6", at=(0, 0, 0))
+out("ISO 4036 M6: ohne Fase — an der Auflage voll breit, wo ISO 4032 schon gerundet ist, und niedriger",
+    plain.chamfer is False and hexn.chamfer is True and len(plain.shape.Solids()) == 1
+    and near(plain.height, 3.2, 1e-9) and plain.height < hexn.height
+    and near(dia_at(plain.shape, 0.0), 10.0 / COS30, 0.01)
+    and dia_at(hexn.shape, 0.0) < dia_at(plain.shape, 0.0) - 1.0,
+    (round(dia_at(plain.shape, 0.0), 2), round(dia_at(hexn.shape, 0.0), 2), plain.height, hexn.height))
+
 out("Ein Schlitz ist fuer Sechskant und Vierkant, nicht fuer Bund und Kuppe",
     raises(lambda: Nut("DIN 1665", "M6", at=(0, 0, 0)).trap(slot="+X", slot_length=20))
     and raises(lambda: Nut("DIN 1587", "M6", at=(0, 0, 0)).trap(slot="+X", slot_length=20))
@@ -335,7 +343,7 @@ for (const line of lines) {
   const [label, ok, detail] = JSON.parse(line);
   check(label, ok, detail);
 }
-check('Python-Prüfungen liefen durch', lib.status === 0 && lines.length >= 40,
+check('Python-Prüfungen liefen durch', lib.status === 0 && lines.length >= 41,
   lib.status === 0 ? `${lines.length} Prüfungen` : (lib.stderr ?? '').slice(-300));
 
 const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'soma-hardware-'));

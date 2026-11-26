@@ -51,6 +51,7 @@ hole it needs come from the same table row, so they cannot drift apart.
 | Low profile socket head | OpenBuilds series (not DIN 7984 — see G3) |
 | Pan head, cheese head | ISO 1580, ISO 1207 |
 | Flange nut, domed cap nut | DIN 1665, DIN 1587 |
+| Hex nut, unchamfered | ISO 4036 |
 | Chamfered washer, internal-tooth lock washer | ISO 7090, DIN 6797 |
 | Deep-groove ball bearing | 56 catalogue numbers, open and capped, bore 3–10 mm |
 | Retaining ring | DIN 471 (shaft), DIN 472 (bore) |
@@ -59,13 +60,14 @@ hole it needs come from the same table row, so they cannot drift apart.
 
 ### 1.3 Data tables
 
-29 of the 42 files in `bd_warehouse/src/bd_warehouse/data/` are present, and every one of them is read by the
+30 of the 48 files in `bd_warehouse/src/bd_warehouse/data/` are present, and every one of them is read by the
 module. The copy is lean, not accidental: what is missing falls into two groups.
 
 | Missing | Why |
 |---|---|
 | three bearing tables (angular contact, cylindrical roller, tapered roller) | No code reads them — see G1a |
-| `hex_head_with_flange_parameters.csv`, `brad_tee_nut_parameters.csv`, `imperial_set_screw_parameters.csv`, `metric_set_screw_parameters.csv` | No part needs them yet; the T-nut table is unusable (see G8) |
+| `hex_head_with_flange_parameters.csv`, `button_head_with_collar_parameters.csv`, `pan_head_with_collar_parameters.csv`, `raised_cheese_head_parameters.csv`, `raised_countersunk_oval_head_parameters.csv`, `cheese_head_washer_parameters.csv`, `imperial_set_screw_parameters.csv`, `metric_set_screw_parameters.csv`, `brad_tee_nut_parameters.csv` | No part needs them yet; the T-nut table is unusable (see G8) |
+| `iso10664def.csv`, `iso_228_1.csv`, four plastic-bottle thread tables | Thread profiles and bottle threads — nothing in SOMA models a thread |
 
 `drill_sizes.csv` is present but only used to resolve heat-set insert holes (`_drill_mm`).
 
@@ -169,8 +171,8 @@ The **T-nut is not implemented on purpose.** `brad_tee_nut_parameters.csv` has t
 values for M6/M8/M10 and a 36 mm flange diameter on an M6 nut — a scraped product listing, not a standard. Upstream
 keeps `BradTeeNut` commented out for the same reason. The file was deleted again rather than shipped unread.
 
-The **unchamfered hex nut** stays out as well: no table in the set describes one (every nut column is a chamfered
-standard), and inventing the chamfer away would change a dimension the drawings do not have.
+The **unchamfered hex nut** is `Nut("ISO 4036")` — a table of its own, not ISO 4032 with the chamfer filed off, and
+the nut is lower (M6: 3.2 against 5.2 mm). `Nut.chamfer` says which one you have.
 
 **G9. `Washer` has no `trap()`.** ✅ **Done** — `washer.trap(clearance=0.2, depth=None)`, a round pocket of
 `outer_diameter + 2 × clearance` and `thickness + clearance` deep, open to the surface when the washer is `sunk`.

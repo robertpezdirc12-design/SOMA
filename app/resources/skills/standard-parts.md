@@ -38,7 +38,8 @@ add_part("Screw 1", s, group="Hardware")               # role "hardware" automat
   `Nut("ISO 4032", "M3", at=w.outer, direction="+Z")`.
 - Standards: screws ISO 4762 (socket head, the default), ISO 7380 (button head, low), ISO 10642 (countersunk),
   ISO 4017, ISO 4014, DIN 931 (hex head), ISO 4026 (set screw), ISO 1580 (pan head), ISO 1207 (cheese head).
-  Nuts ISO 4032, thin ISO 4035, high ISO 4033, square DIN 557, with flange DIN 1665, domed cap DIN 1587. Washers
+  Nuts ISO 4032, thin ISO 4035, high ISO 4033, thin and unchamfered ISO 4036, square DIN 557, with flange DIN 1665,
+domed cap DIN 1587. Washers
   ISO 7089, large ISO 7093 on soft material, chamfered ISO 7090, internal-tooth lock DIN 6797. Inserts by ruthex
   (default), CNCKitchen, McMaster-Carr, Hilitchi. In prints, heat-set inserts instead of nuts where the screw is
   opened often.
@@ -183,15 +184,15 @@ add_part("Seal", o, group="Hardware")
 ## What the library covers, and what it does not
 
 Covered: screws ISO 4762, 7380, 10642, 4017, 4014, DIN 931, 4026, 7379 (shoulder), 1580 (pan head), 1207 (cheese
-head) and the OpenBuilds low profile series; nuts ISO 4032, 4033, 4035, DIN 557, DIN 1665 (flange), DIN 1587 (domed
-cap); washers ISO 7089, 7091, 7093, 7090 (chamfered), DIN 6797 (internal teeth); heat-set inserts from five makers;
+head) and the OpenBuilds low profile series; nuts ISO 4032, 4033, 4035, 4036 (thin, no chamfer), DIN 557, DIN 1665
+(flange), DIN 1587 (domed cap); washers ISO 7089, 7091, 7093, 7090 (chamfered), DIN 6797 (internal teeth); heat-set inserts from five makers;
 deep-groove ball bearings from 3 to 10 mm bore, open and capped; retaining rings DIN 471 and DIN 472 for shafts and
 bores from 3 to 300 mm; parallel keys DIN 6885 for shafts from 6 to 50 mm; O-rings ISO 3601 in 349 sizes with the
 groove for shaft, bore and face seals; and the clearance holes, tap drills, counterbores, nut traps, insert holes,
 grooves, keyways and gland grooves that go with them. Nothing else.
 
 Not covered, model by hand (with `role="hardware"`): roller and angular-contact bearings, dowel pins, gears,
-sprockets, pulleys, springs, T-nuts, unchamfered hex nuts, lip seals and shaft seals, imperial fasteners. Ask before inventing dimensions; the
+sprockets, pulleys, springs, T-nuts, lip seals and shaft seals, imperial fasteners. Ask before inventing dimensions; the
 sizes in this skill are a starting point, not a catalogue.
 
 Three simplifications to know about:

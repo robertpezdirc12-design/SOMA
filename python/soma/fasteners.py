@@ -100,6 +100,9 @@ NUTS = {
     "iso4033": dict(name="ISO 4033", title="Hex nut, high", table="hex_nut_parameters.csv", col="iso4033", shape="hex"),
     "iso4035": dict(name="ISO 4035", title="Hex nut, thin", table="hex_nut_parameters.csv", col="iso4035", shape="hex"),
     "din557": dict(name="DIN 557", title="Square nut", table="square_nut_parameters.csv", col="din557", shape="square"),
+    # Ohne Fase: eigene Norm (ISO 4036), eigene Tabelle, und die Mutter ist niedriger als ISO 4032
+    "iso4036": dict(name="ISO 4036", title="Hex nut, thin, unchamfered", table="unchamfered_hex_nut_parameters.csv",
+                    col="iso4036", shape="hex", chamfer=False),
     "din1665": dict(name="DIN 1665", title="Hex nut with flange", table="hex_nut_with_flange_parameters.csv",
                     col="din1665", shape="flange", cols=("m", "s", "dc", "c")),
     "din1587": dict(name="DIN 1587", title="Domed cap nut", table="domed_cap_nut_parameters.csv",
@@ -794,10 +797,10 @@ class Screw(_Part):
 # --- Muttern, Scheiben, Gewindeeinsaetze -------------------------------------------------------------------------------
 
 @functools.cache
-def _nut_local(shape, d, m, s, dims=()):
+def _nut_local(shape, d, m, s, dims=(), chamfer=True):
     dims = dict(dims)
     if shape == "hex":
-        body = _chamfered_hex(s, m, both=True)
+        body = _chamfered_hex(s, m, both=True) if chamfer else _hex_prism(s, 0.0, m)
     elif shape == "square":
         body = cq.Solid.makeBox(s, s, m, cq.Vector(-s / 2, -s / 2, 0))
     elif shape == "flange":  # Sechskant mit Bund am Auflagebund
@@ -814,8 +817,8 @@ class Nut(_Part):
     """Nut. Nut("ISO 4032", "M3", at=(x, y, z), direction="+Z"): rests with one face at `at`, `direction` points
     from there into the material (so upwards for a nut under a plate).
 
-    standard  "ISO 4032" (hex), "ISO 4033" (high), "ISO 4035" (thin), "DIN 557" (square), "DIN 1665" (with flange),
-              "DIN 1587" (domed cap, closed)
+    standard  "ISO 4032" (hex), "ISO 4033" (high), "ISO 4035" (thin), "ISO 4036" (thin, no chamfer), "DIN 557"
+              (square), "DIN 1665" (with flange), "DIN 1587" (domed cap, closed)
     sunk      True: sunk flush (outer side at `at`), 0.5: 0.5 mm deeper. trap() gives the pocket for it
     angle     rotation about the axis in degrees. At 0 two flats are parallel to the X axis (for axis X: to the Y axis)
     """
@@ -831,6 +834,7 @@ class Nut(_Part):
         vals = _lookup(spec["table"], spec["col"], spec.get("cols", ("m", "s")), self.d, spec["name"])
         self.dims = vals
         self.height, self.key = vals["m"], vals["s"]
+        self.chamfer = spec.get("chamfer", True)
         sink = _sink(sunk, spec["name"])
         self.sunk = sink is not None
         self._place(at, direction, on, angle, self.height + sink if sink is not None else 0.0)
@@ -851,7 +855,8 @@ class Nut(_Part):
         return self.height
 
     def _local(self):
-        return _nut_local(self.shape_kind, self.d, self.height, self.key, tuple(sorted(self.dims.items())))
+        return _nut_local(self.shape_kind, self.d, self.height, self.key, tuple(sorted(self.dims.items())),
+                          self.chamfer)
 
     def trap(self, clearance=0.2, slot=None, slot_length=None):
         """Tool for cut(): pocket for the nut, `clearance` per side and in height.

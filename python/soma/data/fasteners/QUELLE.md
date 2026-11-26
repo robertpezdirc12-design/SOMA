@@ -30,6 +30,7 @@ Verwendet von `soma/fasteners.py`. Der Code dort ist eigener Code und übernimmt
 | `pan_head_parameters.csv` | ISO 1580 (Linsenkopf mit Schlitz) |
 | `cheese_head_parameters.csv` | ISO 1207 (Zylinderkopf mit Schlitz) |
 | `hex_nut_with_flange_parameters.csv` | DIN 1665 (Sechskantmutter mit Bund) |
+| `unchamfered_hex_nut_parameters.csv` | ISO 4036 (Sechskantmutter ohne Fase) |
 | `domed_cap_nut_parameters.csv` | DIN 1587 (Hutmutter) |
 | `chamfered_washer_parameters.csv` | ISO 7090 (Scheibe mit Fase) |
 | `internal_tooth_lock_washer_parameters.csv` | DIN 6797 (Scheibe mit Innenzähnen) |
@@ -96,6 +97,9 @@ Eigenheiten der neuen Tabellen:
   Namen. `_table` nimmt die erste Spalte unabhängig von ihrem Namen, deshalb fällt das nur beim Lesen der Datei auf.
 - `hex_nut_with_flange_parameters.csv` (DIN 1665, M5 bis M20): `c` ist die Dicke des Bundes, `dc` sein Durchmesser,
   `m` die Höhe über alles. Der Bund sitzt an der Auflagefläche, nicht in der Mitte.
+- `unchamfered_hex_nut_parameters.csv` ist **ISO 4036**, nicht ISO 4032 ohne Fase: die Mutter ist eine eigene,
+  niedrigere Norm (M6: 3,2 statt 5,2 mm Höhe) bei gleicher Schlüsselweite. Deshalb eine eigene Tabelle und nicht ein
+  Schalter an der vorhandenen — `Nut.chamfer` sagt, welche von beiden man hat.
 - `domed_cap_nut_parameters.csv` (DIN 1587, M4 bis M24) hat nur `dk`, `m` und `s`. Die Kuppe ist eine Halbkugel mit
   `dk` als Durchmesser auf dem Sechskant, die Gesamthöhe also `m + dk/2` — genau das prüft der Test, denn eine offene
   Mutter wäre sonst nicht von einer geschlossenen zu unterscheiden.
