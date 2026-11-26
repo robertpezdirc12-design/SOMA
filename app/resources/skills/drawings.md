@@ -106,7 +106,9 @@ sh.text("Deburr all edges", (30, 30))
   text moves alone and stands unattached. For a circle, `text_at` along the `angle` ray needs no leader.
 - Diameters with `view.diameter(center, r)` where the hole is a circle, on a side view a linear dimension with
   `"Ø<>"`. Radii with `view.radius(center, r)`. `angle=` is the direction from the center to the text (0 right, 90 up),
-  pointing away from other dimensions and edges. Patterns: one dimension `"4x <>"`, positions from a datum or the
+  pointing away from other dimensions and edges. One diameter per centre: a second one on the same centre crosses the
+  first at the centre, so it goes into another view — or into the section as a linear `"Ø<>"` between the two lines that
+  are its walls, which is what a stepped bore needs. Patterns: one dimension `"4x <>"`, positions from a datum or the
   pattern center, `view.center_marks()`.
 - Positions that are not in the model (screws fitted later, holes drilled on assembly): mark them with
   `view.center_mark(point, r)` and dimension to its center. Dimensions may also end on a `view.centerline()`.
@@ -151,7 +153,9 @@ sh.text("Deburr all edges", (30, 30))
 
 ## Build and check
 
-1. `soma drawing build` (or `soma drawing build drawings/x.py`). Errors name file and line. Warnings report texts on
+1. `soma drawing build` for all of them, or `soma drawing build <name>` for one — the sheet's name ("Bearing block"),
+   its file name without `drawings/` and `.py` (`assembly`), or a path (`drawings/x.py`). An unknown name is an error
+   that lists what the project has. Errors name file and line. Warnings report texts on
    edges, on dimension, leader or cutting lines or on each other, things outside the frame or on the title block or a
    table, texts too long for their cell or title block field, points on no edge, typed numbers that differ from the
    model and uncommon scales. Fix them, or tell the user why one is fine.
