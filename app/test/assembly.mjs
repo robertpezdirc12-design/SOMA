@@ -27,6 +27,27 @@ const OVERHANG = 15;
 const STUB = 30;
 const SHAFT_LEN = OVERHANG + DEPTH + STUB;
 
+// Ein verschraubtes Blech, absichtlich ohne Passung: die Schraube steckt in einem 6,6-mm-Loch, die Scheibe liegt auf
+// dem Blech, die Mutter darüber. Nichts davon darf sich schneiden — die Mutter hat die Nennbohrung, weil SOMA keine
+// Gewinde zeichnet.
+const JOINT_PLATE_T = 8.0;
+const JOINT = `import cadquery as cq
+from soma import add_part
+from soma.fasteners import Nut, Screw, Washer
+
+PLATE_T = 8.0
+plate = cq.Workplane("XY").box(40, 30, PLATE_T, centered=(True, True, False))
+plate = plate.faces(">Z").workplane().hole(6.6)                      # Durchgangsloch fuer M6
+add_part("Plate", plate)
+
+screw = Screw("ISO 4762", "M6x20", at=(0, 0, 0), direction="+Z")     # Kopf unten, Schaft nach oben durch
+washer = Washer("ISO 7089", "M6", at=(0, 0, PLATE_T), direction="-Z")
+nut = Nut("ISO 4032", "M6", at=(0, 0, PLATE_T + washer.thickness), direction="-Z")
+add_part("Screw", screw)
+add_part("Washer", washer)
+add_part("Nut", nut)
+`;
+
 /** Kopie des Beispiels in einen temporären Ordner, optional mit einer Änderung am Quelltext. */
 function copy(dir, name, edit) {
   const project = path.join(dir, name);
@@ -120,6 +141,34 @@ try {
   check('Die Stückliste zählt zwei Lager, zwei Ringe und eine Passfeder',
     count('6200') === 2 && count('DIN 471') === 2 && count('DIN 6885') === 1 && (bom?.manufactured ?? []).length === 2,
     bought.map((l) => `${l.count} x ${l.designation}`).join(', ') + ` / ${(bom?.manufactured ?? []).length} gefertigt`);
+
+  // Dieselbe Messung an der exportierten Datei: from_file(overlaps=True) ist ein eigener Weg und muss dasselbe sagen.
+  // Ein Export, in dem zwei Körper ineinandersitzen, ist genau der Fehler, den man erst im anderen Programm merkt.
+  const exp = py(['export', '--assembly', '--format', 'step', '--project', project]);
+  const step = path.join(project, 'exports', `${path.basename(project)}.step`);
+  const stepDoc = json(['inspect', '--step', step, '--overlaps', '--json']);
+  check('Die exportierte STEP-Datei: sieben Körper und ebenfalls kein Paar',
+    exp.status === 0 && fs.existsSync(step) && stepDoc?.totals?.solids === 7
+    && Array.isArray(stepDoc.overlaps) && stepDoc.overlaps.length === 0 && stepDoc.ok === true,
+    `${stepDoc?.totals?.solids} Körper, ${JSON.stringify(stepDoc?.overlaps)}`);
+
+  // Und die Kehrseite: eine Schraube in ihrer Mutter ist KEINE Überschneidung. SOMA zeichnet keine Gewinde, die
+  // Mutter hat also die Nennbohrung und die Schraube geht mit null hindurch. Fiele diese Zusage, wäre jedes
+  // verschraubte Modell voller Meldungen — deshalb steht sie hier als Prüfung.
+  const joint = path.join(dir, 'joint');
+  fs.mkdirSync(joint);
+  fs.writeFileSync(path.join(joint, 'model.py'), JOINT);
+  const jointBuild = py(['build', '--project', joint]);
+  const jointDoc = json(['inspect', '--overlaps', '--json', '--project', joint]);
+  // Damit die Prüfung nicht bloß deshalb besteht, weil die Teile zufällig nebeneinander liegen: der Stapel muss
+  // wirklich ein Stapel sein — Scheibe auf dem Blech, Mutter auf der Scheibe, Schaft durch beide hindurch.
+  const jp = (n) => jointDoc?.parts?.find((p) => p.name === n);
+  const stack = jp('Washer')?.bounds.min[2] === JOINT_PLATE_T && jp('Nut')?.bounds.min[2] === jp('Washer')?.bounds.max[2]
+    && (jp('Screw')?.bounds.max[2] ?? 0) > (jp('Nut')?.bounds.max[2] ?? 0);
+  check('Schraube durch Scheibe und Mutter: vier Teile im Stapel, kein Paar',
+    jointBuild.status === 0 && jointDoc?.totals?.parts === 4 && stack
+    && (jointDoc?.overlaps ?? []).length === 0 && jointDoc.ok === true,
+    stack ? `${(jointDoc?.overlaps ?? []).length} Paare` : `Stapel: ${JSON.stringify(jointDoc?.parts?.map((p) => [p.name, p.bounds?.min[2], p.bounds?.max[2]]))}`);
 } finally {
   cleanup(dir);
 }

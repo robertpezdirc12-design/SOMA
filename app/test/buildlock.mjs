@@ -50,7 +50,11 @@ try {
   const b = build(dir);
   const [ra, rb] = await Promise.all([a.done, b.done]);
   check('Zwei Builds gleichzeitig: beide ok', ra.code === 0 && rb.code === 0, (ra.err + rb.err).slice(-200));
-  check('Der zweite wartet auf den ersten und sagt es', rb.err.includes('Waiting for another build'), rb.err.slice(0, 120));
+  // Ob der zweite gewartet hat, hängt davon ab, wie schnell sein Prozessstart war: unter Last kann der länger dauern
+  // als der ganze erste Build, und dann war die Sperre schon frei. Die Meldung selbst prüft Schritt 3, wo das Warten
+  // erzwungen ist — hier zählt nur, dass nichts kaputtgeht und dass die Reihenfolge stimmt.
+  check('Der zweite Build wartet oder beginnt nach dem ersten', rb.code === 0,
+    rb.err.includes('Waiting for another build') ? 'gewartet und es gesagt' : 'Sperre war beim Start schon frei');
   const soma = path.join(dir, '.soma');
   const map = JSON.parse(fs.readFileSync(path.join(soma, 'model.map.json'), 'utf8'));
   const geo = fs.readdirSync(path.join(soma, 'geometry'));
@@ -76,10 +80,23 @@ try {
   const e = build(dir, { SLEEP: '60' });
   await until('Build hält die Sperre', () => started(dir) >= 1);
   const rf = await build(dir, { SOMA_BUILD_LOCK_WAIT_S: '1' }).done;
-  check('Zeitlimit beim Warten: Build ERROR mit Hinweis auf den anderen Build', rf.code === 1 && rf.err.includes('Another build of this model has been running'), rf.err.slice(-200));
+  // Hier ist das Warten erzwungen (der andere Build schläft 60 s), also steht auch die Meldung sicher da.
+  check('Wartender Build sagt es und nennt beim Zeitlimit den anderen Build',
+    rf.code === 1 && rf.err.includes('Waiting for another build')
+    && rf.err.includes('Another build of this model has been running'), rf.err.slice(-200));
   check('build.json bleibt die des laufenden Builds', fs.readFileSync(path.join(soma, 'build.json'), 'utf8') === before);
   killTree(e.child.pid);
   await e.done;
+
+  // 4) Die Sperrdatei lässt sich nicht öffnen (hier: ein Ordner mit ihrem Namen): Der Build läuft weiter, sagt aber,
+  // dass er ohne Sperre läuft. Eine Sperre, die nicht sperrt, darf nicht stumm ausfallen.
+  const blocked = path.join(dir, 'blocked');
+  fs.mkdirSync(blocked);
+  fs.writeFileSync(path.join(blocked, 'model.py'), MODEL);
+  fs.mkdirSync(path.join(blocked, '.soma', 'geometry', 'build.lock'), { recursive: true });
+  const rLock = await build(blocked).done;
+  check('Ohne öffnbare Sperrdatei: Build ok, aber mit Hinweis statt stumm ohne Sperre',
+    rLock.code === 0 && rLock.err.includes('building without the lock'), `exit ${rLock.code}: ${rLock.err.slice(-160)}`);
 } catch (err) {
   console.log('ABBRUCH:', err.message);
   t.fail();

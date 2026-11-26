@@ -28,7 +28,11 @@ The shaft volume is the proof that the features are really there — a full Ø10
 measured 6090.9 is that minus two ring grooves (13.5 mm³) and one 20 mm keyway (100.2 mm³).
 
 `npm run test:assembly` repeats all of this and then builds two deliberately wrong versions to make sure the
-measurement bites: the same model with free-state rings (two overlaps) and with the key unturned (one overlap).
+measurement bites: the same model with free-state rings (two overlaps) and with the key unturned (one overlap). It
+also measures the exported STEP file, because `inspect --step --overlaps` is a second code path and an export that
+merges two bodies is the mistake you only notice in the other program. And it checks the opposite case on a model
+built for it: a screw through a washer and a nut, where **nothing** may overlap — SOMA draws no threads, so the nut's
+bore is nominal and the screw passes through it. If that ever changed, every bolted assembly would light up.
 
 ## What this example found
 

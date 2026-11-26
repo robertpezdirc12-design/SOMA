@@ -147,13 +147,14 @@ entries are `Solid 1`, `Solid 2`, … — a wrong name is worse than a generic o
 ### `overlaps` (only with `--overlaps`)
 
 ```json
-"overlaps": [ { "a": "Shaft", "b": "Ring A", "volume": 4.2273, "thickness": 0.1298 } ]
+"overlaps": [ { "a": "Shaft", "b": "Ring A", "volume": 4.2273, "thickness": 0.1298, "at": [0.0, -0.251493, 9.5] } ]
 ```
 
 One entry per pair of parts whose solids really occupy the same space, sorted by name. `thickness` is `2 V / A` of
 the common volume, which turns a volume into a depth: a flat sliver along a contact face has plenty of volume and no
 depth, a needle has depth and no volume. A pair is only reported when **both** are above the noise floor
-(`volume > 1e-3 mm³` **and** `thickness > 0.01 mm`), so parts that merely touch in a face are not reported.
+(`volume > 1e-3 mm³` **and** `thickness > 0.01 mm`), so parts that merely touch in a face are not reported. `at` is the
+centre of the common body — the point to look at in the viewer.
 
 Each pair also becomes an `error` in `checks.issues` (code `overlap`), so `--overlaps --strict` is a gate in CI. The
 measurement costs one boolean intersection per candidate pair, which is why it is opt-in: a bounding-box test throws
@@ -167,6 +168,11 @@ Two overlaps are not defects and both have a reason:
   nominal size and the shaft at its upper limit, which is a drawing error, not a fit.
 - **A circlip in its free state** is smaller than its own groove (`d3 < d2`), so it always overlaps the shaft by
   `(d2 - d3) / 2`. Use `RetainingRing(..., mounted=True)` in an assembly that measures interference.
+
+A bolted joint is **not** an overlap, and that is a design decision worth knowing: SOMA models no threads, so a nut's
+bore is the nominal diameter and the screw passes through it with zero interference. A screw in a nut, a screw through
+a washer and a screw in its own tapped hole all measure clean. What does show up is a screw in a plate that was never
+given a hole — the usual mistake.
 
 ### `checks`
 

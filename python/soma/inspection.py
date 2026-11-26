@@ -192,22 +192,23 @@ def _checks(parts, fast=False, overlaps=None):
     # Zwei Koerper koennen nicht am selben Ort sein: entweder sitzt ein Teil falsch oder die Tasche fehlt, in die
     # es hineinragt. Ein Presssitz ist im Modell nominal, also null Ueberschneidung.
     for o in overlaps or ():
+        where = f" at {_fmt3(o['at'])}" if o.get("at") else ""
         add("error", "overlap", o["a"],
-            f"cuts {o['thickness']} mm deep into {o['b']!r}, {o['volume']} mm3. Move the part or cut the pocket "
-            "it is meant to sink into")
+            f"cuts {o['thickness']} mm deep into {o['b']!r}{where}, {o['volume']} mm³. Move the part or cut the "
+            "pocket it is meant to sink into")
 
     errors = [i for i in issues if i["level"] == "error"]
     return dict(ok=not errors, issues=issues)
 
 
 def _overlaps(items):
-    """Paare, deren Koerper sich durchdringen: [dict(a, b, volume, thickness)], nach Namen sortiert.
+    """Paare, deren Koerper sich durchdringen: [dict(a, b, volume, thickness, at)], nach Namen sortiert.
 
     `items` ist [(Name, Form)]. Die Boxpruefung wirft zuerst alles weg, was sich nicht beruehren kann; erst dann
     schneidet OCCT. Gemeldet wird nur, was zugleich Volumen und Tiefe hat (OVERLAP_VOLUME, OVERLAP_DEPTH): zwei
     Bauteile, die sich in einer Flaeche beruehren, haben eine Schnittmenge von ein paar Mikrometern Kubik, und
     die ist Rechenrauschen, kein Fehler. Die Dicke 2 V / A macht daraus eine Zahl, die man mit einem Spalt
-    vergleichen kann.
+    vergleichen kann. `at` ist der Schwerpunkt der Schnittmenge: das ist die Stelle, die man im Viewer sucht.
     """
     boxes = []
     for name, shape in items:
@@ -234,7 +235,11 @@ def _overlaps(items):
             thickness = 2 * volume / area if area > 1e-9 else 0.0
             if thickness <= OVERLAP_DEPTH:
                 continue
-            found.append(dict(a=na, b=nb, volume=_r(volume, 4), thickness=_r(thickness, 4)))
+            try:
+                at = _vec(common.Center())
+            except Exception:
+                at = None
+            found.append(dict(a=na, b=nb, volume=_r(volume, 4), thickness=_r(thickness, 4), at=at))
     found.sort(key=lambda o: (o["a"], o["b"]))
     return found
 

@@ -1,10 +1,8 @@
-# Build results of this example, regenerated from model.py — never versioned
-.soma/model.glb
-.soma/model.map.json
-.soma/build.json
-.soma/zip-info.json
-.soma/geometry/
-.soma/env/
+# Build results of this example, regenerated from model.py — never versioned.
+# `.soma/` is the app's working folder (mesh, geometry, build.json, analysis results); `output/` and `exports/` are
+# what `soma build` and `soma export` write. All of it comes back from `soma build`.
+.soma/
 output/
+exports/
 __pycache__/
 *.pyc

@@ -75,13 +75,17 @@ def build_lock(root, wait=None):
     """Nur ein Build je Modell zur selben Zeit. Die App baut nach jeder Aenderung, der Agent ruft danach `soma build` im
     Terminal: Gleichzeitig schrieben beide in dieselben Dateien, und model.map.json konnte auf ein BREP zeigen, das der
     andere Build schon geloescht hatte. Die Sperre gehoert dem Betriebssystem und endet mit dem Prozess, auch nach einem
-    Absturz bleibt also nichts haengen. Laesst sich die Sperrdatei nicht anlegen, wird ohne Sperre gebaut wie bisher."""
+    Absturz bleibt also nichts haengen.
+
+    Laesst sich die Sperrdatei nicht oeffnen, wird ohne Sperre gebaut — aber nicht stumm: eine Sperre, die nicht sperrt,
+    ist schlimmer als keine, weil man sich auf sie verlaesst. Deshalb ein paar Versuche (ein Virenscanner haelt die Datei
+    fuer einen Moment) und danach eine Meldung auf stderr."""
     wait = LOCK_WAIT_S if wait is None else wait
     geo = Path(root) / ".soma" / "geometry"  # in .gitignore und nie in der ZIP
-    try:
-        geo.mkdir(parents=True, exist_ok=True)
-        f = open(geo / "build.lock", "a+b")
-    except OSError:
+    f = _open_lock(geo)
+    if f is None:
+        print("Warning: cannot open .soma/geometry/build.lock, building without the lock. Another build of this model "
+              "may write the same files at the same time.", file=sys.stderr, flush=True)
         yield
         return
     try:
@@ -101,6 +105,19 @@ def build_lock(root, wait=None):
             _unlock(f)
     finally:
         f.close()
+
+
+def _open_lock(geo, attempts=5):
+    """Die Sperrdatei oeffnen, ein paar Mal: unter Windows kann ein Virenscanner sie fuer einen Moment halten. None
+    heisst, sie liess sich nicht oeffnen."""
+    for i in range(attempts):
+        try:
+            geo.mkdir(parents=True, exist_ok=True)
+            return open(geo / "build.lock", "a+b")
+        except OSError:
+            if i == attempts - 1:
+                return None
+            time.sleep(0.1)
 
 
 def write_atomic(path, write, tmp_dir):

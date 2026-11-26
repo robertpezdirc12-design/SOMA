@@ -87,7 +87,8 @@ soma inspect --overlaps --strict   # exit code 1 when two parts share space
 A reported pair is a part that was placed where another part already is, or a pocket that was never cut. Both are the
 usual mistakes in an assembly, and neither shows up in a picture. Two overlaps are not defects: a press fit is nominal
 in the model (so it overlaps by nothing) and a circlip in its free state is smaller than its own groove — for that one
-use `RetainingRing(..., mounted=True)`.
+use `RetainingRing(..., mounted=True)`. A bolted joint is clean for a different reason: SOMA models no threads, so a
+nut's bore is the nominal diameter and the screw passes through it with zero interference.
 
 ## Foreign STEP files
 

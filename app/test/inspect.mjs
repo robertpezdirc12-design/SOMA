@@ -107,9 +107,10 @@ try {
   // TwinB), die absichtlich ineinander und in die Platte ragen — genau das muss herauskommen.
   const ov = json(['--overlaps']).doc;
   const pairs = (ov.overlaps ?? []).map((o) => `${o.a}/${o.b}`);
-  check('--overlaps: drei Paare mit 125 mm³ und 1,67 mm Tiefe, ohne die Angabe gar kein Feld',
+  check('--overlaps: drei Paare mit 125 mm³, 1,67 mm Tiefe und einem Ort, ohne die Angabe gar kein Feld',
     pairs.join() === 'Plate/TwinA,Plate/TwinB,TwinA/TwinB'
-    && (ov.overlaps ?? []).every((o) => o.volume === 125 && o.thickness === 1.6667)
+    && (ov.overlaps ?? []).every((o) => o.volume === 125 && o.thickness === 1.6667
+      && Array.isArray(o.at) && o.at.length === 3 && o.at.every((v) => typeof v === 'number'))
     && ov.ok === false && !('overlaps' in doc),
     `${JSON.stringify(ov.overlaps)} / ohne: ${'overlaps' in doc}, ok ${ov.ok}`);
 
