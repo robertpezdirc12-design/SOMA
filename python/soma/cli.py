@@ -327,6 +327,14 @@ def cmd_bom(args):
 def cmd_inspect(args):
     """Measured facts about the model or a CAD file as one JSON document (schema soma.inspect/1, inspection.py)."""
     from . import inspection
+    if args.step and (args.parts or args.entry):
+        names = ", ".join(x for x in ("--parts", "--entry") if getattr(args, x[2:]))
+        msg = f"{names} only apply to the model, not to a STEP/BREP file"
+        if args.json:
+            print(json.dumps(dict(schema=inspection.SCHEMA, ok=False, error=msg), ensure_ascii=False))
+        else:
+            print(f"inspect: {msg}", file=sys.stderr)
+        return 1
     try:
         if args.step:
             doc = inspection.from_file(args.step, fast=args.fast, density=args.density, overlaps=args.overlaps)

@@ -125,6 +125,12 @@ try {
     `${file.totals.solids}/${doc.totals.solids} Körper, ${file.totals.volume}/${doc.totals.volume} mm³`);
   check('Namen aus der Baugruppe bleiben erhalten (Plate, Lid, TwinA, TwinB)',
     file.parts.map((x) => x.name).sort().join() === 'Lid,Plate,TwinA,TwinB', file.parts.map((x) => x.name).join(' '));
+  const stepParts = py(['inspect', '--step', step, '--parts', 'Nope', '--json']);
+  const stepEntry = py(['inspect', '--step', step, '--entry', 'model.py']);
+  check('--parts und --entry gelten nur fuer das Modell, nicht fuer eine STEP-Datei',
+    stepParts.status === 1 && /--parts only apply/.test(JSON.parse(stepParts.stdout).error)
+    && stepEntry.status === 1 && /--entry only apply/.test(stepEntry.stderr),
+    (stepParts.stdout + stepEntry.stderr).slice(-160));
 
   // 8) Fehler werden erklärt, nicht gestapelt
   const unknown = py(['inspect', '--project', dir, '--parts', 'Nope']);
