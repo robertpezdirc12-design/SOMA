@@ -485,8 +485,6 @@ def cmd_drawing(args):
                     print(f"Note: {p} belongs to no sheet anymore (renamed or removed). Delete it if it is not needed.")
                 if not res["built"] and not res["errors"]:
                     print(f"No drawings: create a file in {drawrun.DRAW_DIR}/ (from soma.drawing import Sheet).")
-            if args.name and not args.name.endswith(".py") and not drawrun.find(root, args.name):
-                return _fail(f"No drawing {args.name!r} found")
             return 1 if res["errors"] else 0
         idx = drawrun.read_index(root)
         if args.action == "list":

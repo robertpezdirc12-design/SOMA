@@ -279,6 +279,21 @@ print(json.dumps(dict(errors=len(aud.errors), types=types, layers=layers, detail
   check('Modell baut nicht: Meldung mit Ort, keine Zeichnung', b4.status === 1 && b4.stderr.includes('The model does not build, so no drawing does either')
     && b4.stderr.includes('model.py:10'), b4.stderr.slice(-200));
 
+  // Ein Blatt umbenennen und weiter mit dem alten Namen bauen: der Build gilt, der Name ist nur veraltet.
+  const renamed = fs.mkdtempSync(path.join(os.tmpdir(), 'soma-drawing-rename-'));
+  fs.mkdirSync(path.join(renamed, 'drawings'));
+  fs.writeFileSync(path.join(renamed, 'model.py'), MODEL);
+  const sheetFile = path.join(renamed, 'drawings', 'base.py');
+  fs.writeFileSync(sheetFile, 'from soma.drawing import Sheet\nsh = Sheet("Bracket")\nsh.view("Bracket", "front", at=(100, 100))\n');
+  check('Vor dem Umbenennen: erster Build', soma(renamed, 'drawing', 'build').status === 0);
+  fs.writeFileSync(sheetFile, 'from soma.drawing import Sheet\nsh = Sheet("Bracket2")\nsh.view("Bracket", "front", at=(100, 100))\n');
+  const rb = soma(renamed, 'drawing', 'build', 'Bracket');
+  const typo = soma(renamed, 'drawing', 'build', 'Typo');
+  check('Umbenanntes Blatt: Build mit dem alten Namen gilt, Tippfehler wird weiter abgelehnt',
+    rb.status === 0 && rb.stdout.includes('Drawing ok: "Bracket2"') && !rb.stderr.includes("No drawing 'Bracket' found")
+    && typo.status === 1 && /There is no drawing 'Typo'/.test(typo.stderr), (rb.stderr + typo.stderr).slice(-200));
+  cleanup(renamed);
+
   // 2) In der App: PDF im Code-Panel, nichts davon zählt als ungespeicherte Änderung
   app = await startApp({ name: 'drawing' });
   const { ev, waitFor } = app;
