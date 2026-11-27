@@ -895,7 +895,8 @@ class Nut(_Part):
         self.chamfer = spec.get("chamfer", True)
         sink = _sink(sunk, spec["name"])
         self.sunk = sink is not None
-        self._place(at, direction, on, angle, self.height + sink if sink is not None else 0.0)
+        # A cap nut is taller than its hexagon: sink by the outer face, not by `m`.
+        self._place(at, direction, on, angle, self.overall_height + sink if sink is not None else 0.0)
 
     @property
     def designation(self):

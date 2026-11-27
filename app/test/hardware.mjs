@@ -202,6 +202,17 @@ out("trap: Bundmutter bekommt ein rundes Lager fuer den Bund, Hutmutter ein Loch
     and near(bb(ct)[1] - bb(ct)[0], 9.9, 1e-6) and near(bb(ct)[5], 5.0 + 9.5 / 2 + 0.2, 1e-6),
     (round(dia_at(ft, 0.5), 2), round(bb(ct)[1] - bb(ct)[0], 2), round(bb(ct)[5], 2)))
 
+# A sunk nut's outer face is at the seat — for a cap nut that face is the dome, not the hexagon.
+cs = Nut("DIN 1587", "M6", at=(0, 0, 0), sunk=True)
+hs = Nut("ISO 4032", "M6", at=(0, 0, 0), sunk=True)
+cs_half = Nut("DIN 1587", "M6", at=(0, 0, 0), sunk=0.5)
+out("Sunk nut: the outer face sits at the seat, including the cap nut's dome",
+    near(bb(cs.shape)[5], 0.0, 1e-6) and near(bb(cs.shape)[4], -cs.overall_height, 1e-6)
+    and near(cs.outer[2], 0.0, 1e-6) and near(bb(cs.trap())[5], 1.0, 1e-6)
+    and near(bb(cs_half.shape)[5], -0.5, 1e-6)
+    and near(bb(hs.shape)[5], 0.0, 1e-6) and near(bb(hs.shape)[4], -hs.overall_height, 1e-6),
+    (round(bb(cs.shape)[4], 2), round(bb(cs.shape)[5], 2), round(bb(cs_half.shape)[5], 2), round(bb(cs.trap())[5], 2)))
+
 plain, hexn = Nut("ISO 4036", "M6", at=(0, 0, 0)), Nut("ISO 4032", "M6", at=(0, 0, 0))
 out("ISO 4036 M6: ohne Fase — an der Auflage voll breit, wo ISO 4032 schon gerundet ist, und niedriger",
     plain.chamfer is False and hexn.chamfer is True and len(plain.shape.Solids()) == 1
