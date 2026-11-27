@@ -69,7 +69,7 @@ slot_length=…` the nut slides in from the side. At `angle=0` two flats are par
 as wide as the nut. For a slot along Y use `angle=30`.
 
 The shape follows the nut: a flange nut (DIN 1665) gets a round pocket for its flange with the hexagon above it, a
-domed cap nut (DIN 1587) a round pocket up over the dome. A side slot is refused for both — a flange and a dome cannot
+domed cap nut (DIN 1587) a round pocket wide enough for the hexagon's corners and up over the dome. A side slot is refused for both — a flange and a dome cannot
 pass through one — so cut that pocket by hand if the design needs it.
 
 `washer.trap(clearance=0.2)` is the same idea for a recessed washer: a round pocket so the washer sits below the

@@ -205,7 +205,8 @@ material. The toothed washer is the ring plus `n` radial teeth reaching 30 % of 
 table's `n` column is used as the count.
 
 `Nut.trap()` had to learn the shapes too, or the pocket would be wrong in a way that is only visible after cutting:
-the flange gets a round pocket with the hexagon above it, the cap nut a round pocket up over the dome. A side slot is
+the flange gets a round pocket with the hexagon above it, the cap nut a round pocket wide enough for the hexagon's
+corners and up over the dome. A side slot is
 refused for both with a sentence instead of silently cutting a slot a flange cannot pass through.
 
 The **T-nut is not implemented on purpose.** `brad_tee_nut_parameters.csv` has three rows, one brand, identical

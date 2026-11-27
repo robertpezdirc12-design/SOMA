@@ -935,7 +935,9 @@ class Nut(_Part):
             pocket = _cyl(self.dims["dc"] + 2 * clearance, 0.0, self.dims["c"] + clearance)
             pocket = pocket.fuse(_hex_prism(sc, self.dims["c"] - 0.01, top))
         elif self.shape_kind == "cap":  # Hutmutter: rundes Loch bis ueber die Kuppe, kein Sechskant noetig
-            pocket = _cyl(self.dims["dk"] + 2 * clearance, 0.0,
+            # The round pocket also has to clear the hexagon: its corners reach past the dome on every size.
+            across = self.dims["dk"] if self.dims["dk"] > self.key / COS30 else self.key / COS30
+            pocket = _cyl(across + 2 * clearance, 0.0,
                           self._zs + MARGIN if self.sunk else self.overall_height + clearance)
         else:
             pocket = cq.Solid.makeBox(sc, sc, top, cq.Vector(-sc / 2, -sc / 2, 0))

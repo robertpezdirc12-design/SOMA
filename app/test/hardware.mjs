@@ -199,8 +199,15 @@ out("DIN 1587 M6: geschlossen, Kuppe %s hoch, das Gewinde geht nicht durch" % (d
 ft, ct = fn.trap(), cn.trap()
 out("trap: Bundmutter bekommt ein rundes Lager fuer den Bund, Hutmutter ein Loch ueber die Kuppe",
     near(dia_at(ft, 0.5), 14.6, 0.01) and near(dia_at(ft, 3.0), 10.4 / COS30, 0.01)
-    and near(bb(ct)[1] - bb(ct)[0], 9.9, 1e-6) and near(bb(ct)[5], 5.0 + 9.5 / 2 + 0.2, 1e-6),
+    and near(bb(ct)[1] - bb(ct)[0], 10.0 / COS30 + 0.4, 1e-6) and near(bb(ct)[5], 5.0 + 9.5 / 2 + 0.2, 1e-6),
     (round(dia_at(ft, 0.5), 2), round(bb(ct)[1] - bb(ct)[0], 2), round(bb(ct)[5], 2)))
+
+# The round pocket has to fit the whole cap nut, not just its dome: the hexagon's corners are wider.
+cap_boss = cq.Solid.makeBox(40, 40, 12, cq.Vector(-20, -20, 0))
+cap_fit = cap_boss.cut(cn.trap())
+out("Cap nut trap clears the hexagon as well as the dome",
+    cn.shape.intersect(cap_fit).Volume() < 1e-3,
+    round(cn.shape.intersect(cap_fit).Volume(), 3))
 
 # A sunk nut's outer face is at the seat — for a cap nut that face is the dome, not the hexagon.
 cs = Nut("DIN 1587", "M6", at=(0, 0, 0), sunk=True)
