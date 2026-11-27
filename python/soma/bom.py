@@ -134,8 +134,9 @@ def build(project, density=None, entry=None, merge_identical=False):
     made = _manufactured(parts, density, merge_identical)
     references = [p["name"] for p in parts if p["role"] == "reference"]
     other = [p for p in parts if p["role"] not in ("part", "hardware", "reference")]
-    volume = sum(x["volume"] for x in made if x["volume"] is not None)
-    mass = sum(x["mass_g"] for x in made if x["mass_g"] is not None)
+    # A merged line carries the volume and mass of one instance; `count` tells how many there are.
+    volume = sum(x["volume"] * x["count"] for x in made if x["volume"] is not None)
+    mass = sum(x["mass_g"] * x["count"] for x in made if x["mass_g"] is not None)
     totals = dict(parts=len(parts),
                   purchased=sum(x["count"] for x in purchased),
                   manufactured=sum(x["count"] for x in made),

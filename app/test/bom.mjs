@@ -103,11 +103,15 @@ try {
     && doc.references.count === 1 && doc.references.names.join() === 'Board', JSON.stringify(doc.references));
 
   // 5) --merge-identical: zwei gleiche Winkel werden eine Zeile mit Anzahl 2
-  const merged = json(['--merge-identical']).doc;
+  const merged = json(['--merge-identical', '--density', '2.7']).doc;
   const bracket = merged.manufactured.find((x) => x.name === 'Bracket');
   check('--merge-identical: zwei gleiche Winkel eine Zeile mit Anzahl 2 und beiden Namen',
     merged.manufactured.length === 3 && bracket?.count === 2 && bracket.names.join() === 'Bracket,Bracket 2',
     merged.manufactured.map((x) => `${x.name}x${x.count}`).join(' '));
+  check('--merge-identical: Summen weiterhin ueber alle Teile, nicht nur ueber die Zeilen',
+    Math.abs(merged.totals.volume - doc.totals.volume) < 0.01
+    && Math.abs(merged.totals.mass_g - merged.totals.volume * 2.7 / 1000) < 0.01,
+    `${merged.totals.volume}/${doc.totals.volume} mm³, ${merged.totals.mass_g} g`);
   check('ohne --merge-identical bleiben sie getrennt', doc.manufactured.length === 4
     && doc.manufactured.filter((x) => x.name.startsWith('Bracket')).length === 2, String(doc.manufactured.length));
 
