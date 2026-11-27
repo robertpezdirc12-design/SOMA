@@ -1327,7 +1327,8 @@ class ShaftKey(_Part):
         if kind == "shaft":
             tool = cq.Workplane("XY").slot2D(length, w).extrude(deep).translate((0, 0, -deep)).val()
         else:
-            tool = _box(-length / 2, length / 2, -w / 2, w / 2, -deep, 0.0)
+            # Local +Z points out of the shaft, into the hub: its groove starts at the seat.
+            tool = _box(-length / 2, length / 2, -w / 2, w / 2, 0.0, deep)
         return self._world(tool)
 
 

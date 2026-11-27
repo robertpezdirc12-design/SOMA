@@ -155,6 +155,13 @@ out("Nuten: Welle gerundet und t4 tief, Nabe eckig und t2 tief",
     and near(bb(ks)[3] - bb(ks)[2], k.width, 1e-6),
     (round(bb(ks)[5] - bb(ks)[4], 2), round(bb(kh)[5] - bb(kh)[4], 2)))
 
+# The hub groove starts at the seat and grows outward (+Z), into the hub — not into the shaft below it.
+hub = cq.Solid.makeBox(40, 10, 20, cq.Vector(-20, -5, 0))
+out("Hub keyway cuts into the hub above the seat, not into the shaft below",
+    near(bb(kh)[4], 0.0, 1e-6) and near(bb(kh)[5], k.hub_depth, 1e-6)
+    and near(hub.Volume() - hub.cut(kh).Volume(), 40 * k.width * k.hub_depth, 1e-3),
+    (round(bb(kh)[4], 2), round(bb(kh)[5], 2), round(hub.Volume() - hub.cut(kh).Volume(), 2)))
+
 out("keyway kennt nur Welle und Nabe", raises(lambda: k.keyway("bore")))
 out("ShaftKey(20, 40) und ShaftKey(\"DIN 6885\", 20, 40) sind dasselbe",
     ShaftKey(20, 40, at=(0, 0, 0)).designation == ShaftKey("DIN 6885", 20, 40, at=(0, 0, 0)).designation
