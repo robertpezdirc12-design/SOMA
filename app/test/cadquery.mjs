@@ -118,6 +118,14 @@ elif __name__ == "__main__":
     ex.stderr.slice(-300));
   check('Der Modellcode dazwischen bleibt Zeichen für Zeichen gleich', txt.includes(SOMA_MODEL.split('\n').slice(8).join('\n').trimEnd()));
   check('inputs/ wird nur kopiert, wenn das Skript es nutzt (hier nicht)', !fs.existsSync(path.join(work, 'out', 'inputs')));
+  // Der Ordner wird auch kopiert, wenn der Pfad aus Teilen zusammengesetzt ist (Path / oder os.path.join).
+  write('pathsrc/model.py', 'from pathlib import Path\nimport cadquery as cq\nfrom soma import add_part, import_step\n'
+    + 'add_part("Board", import_step(Path("inputs") / "board.step"))\n');
+  write('pathsrc/inputs/board.step', read('src/inputs/board.step'));
+  const px = JSON.parse(soma(['cadquery', 'export', '--out', path.join(work, 'pathout', 'board.py'),
+    '--project', path.join(work, 'pathsrc'), '--json'], work).stdout.trim().split('\n').pop());
+  check('inputs/ wird auch bei Path("inputs") / "board.step" kopiert',
+    px.status === 'ok' && fs.existsSync(path.join(work, 'pathout', 'inputs', 'board.step')), JSON.stringify(px));
   const run = runExported(path.join(work, 'out', 'plate.py'));
   check('Exportiertes Skript läuft ohne soma: show_object je Teil mit Farbe, param() liefert den Wert aus dem Panel (80)',
     run.shown?.length === 3 && run.shown[0].name === 'Plate' && run.shown[0].x === 80 && JSON.stringify(run.shown[0].color) === '[0.2,0.4,0.8]'

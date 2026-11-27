@@ -222,7 +222,8 @@ def _rewrite(text, imports, mode, block=None, footer=False):
 # --- Export -----------------------------------------------------------------------------------------------------------
 
 def _uses_inputs(texts):
-    return any(re.search(r"""["'](\./)?inputs[/\\]""", t) for t in texts)
+    # `inputs/board.step`, `Path("inputs") / "board.step"` and `os.path.join("inputs", ...)` all use the folder.
+    return any(re.search(r"""["'](\./)?inputs(?:[/\\]|["'])""", t) for t in texts)
 
 
 def _copy_tree(src, dst, warnings, what):
